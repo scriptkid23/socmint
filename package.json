@@ -73,6 +73,7 @@
     "@nestjs/platform-express": "^11.0.0",
     "@nestjs/swagger": "^11.4.4",
     "@radix-ui/react-dialog": "^1.1.15",
+    "@xyflow/react": "^12.11.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "cloakbrowser": "^0.3.31",

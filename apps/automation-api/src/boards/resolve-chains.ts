@@ -65,6 +65,12 @@ export function resolveChains(graph: BoardGraph): FlowJob[] {
           waitUntil: target.data.waitUntil,
           timeoutMs: target.data.timeoutMs,
         });
+      } else if (target.type === 'wait') {
+        const ms = target.data.ms;
+        if (!Number.isFinite(ms) || ms <= 0) {
+          throw new BoardGraphError(`Wait node ${target.id} must have ms > 0`);
+        }
+        steps.push({ type: 'wait', ms });
       } else {
         steps.push({ type: 'screenshot' });
       }

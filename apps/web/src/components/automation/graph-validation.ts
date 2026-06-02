@@ -1,4 +1,4 @@
-import type { BoardGraph, GotoNodeData, ProfileNodeData } from '../../api/client';
+import type { BoardGraph, GotoNodeData, ProfileNodeData, WaitNodeData } from '../../api/client';
 
 export interface GraphError {
   nodeId: string;
@@ -31,6 +31,11 @@ export function validateGraph(graph: BoardGraph): GraphError[] {
       const url = (node.data as GotoNodeData).url;
       if (!url || url.trim() === '') {
         errors.push({ nodeId: node.id, message: 'Goto URL is empty' });
+      }
+    } else if (node.type === 'wait') {
+      const ms = (node.data as WaitNodeData).ms;
+      if (!Number.isFinite(ms) || ms <= 0) {
+        errors.push({ nodeId: node.id, message: 'Wait duration must be greater than 0 ms' });
       }
     }
   }

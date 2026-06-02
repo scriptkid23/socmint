@@ -40,6 +40,17 @@ describe('validateGraph', () => {
     expect(validateGraph(g).some((e) => e.nodeId === 'p')).toBe(true);
   });
 
+  it('flags an invalid wait duration', () => {
+    const g: BoardGraph = {
+      nodes: [
+        { id: 'p', type: 'profile', position: pos, data: { profileId: 'a' } },
+        { id: 'w', type: 'wait', position: pos, data: { ms: 0 } },
+      ],
+      edges: [{ id: 'e1', source: 'p', target: 'w' }],
+    };
+    expect(validateGraph(g).some((e) => e.nodeId === 'w')).toBe(true);
+  });
+
   it('flags an empty goto url and a duplicate profile', () => {
     const g: BoardGraph = {
       nodes: [

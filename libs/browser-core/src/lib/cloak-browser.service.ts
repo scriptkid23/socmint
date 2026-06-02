@@ -64,6 +64,13 @@ export class CloakBrowserService {
               title: await page.title(),
               finalUrl: page.url(),
             });
+          } else if (step.type === 'wait') {
+            await new Promise((resolve) => setTimeout(resolve, step.ms));
+            results.push({
+              type: 'wait',
+              status: 'completed',
+              error: null,
+            });
           } else {
             await page.screenshot({ path: step.screenshotPath, fullPage: true });
             results.push({

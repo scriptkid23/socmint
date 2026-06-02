@@ -9,6 +9,9 @@ export interface GotoNodeData {
   waitUntil?: WaitUntil;
   timeoutMs?: number;
 }
+export interface WaitNodeData {
+  ms: number;
+}
 export type ScreenshotNodeData = Record<string, never>;
 
 interface NodeBase {
@@ -19,6 +22,7 @@ interface NodeBase {
 export type BoardNode =
   | (NodeBase & { type: 'profile'; data: ProfileNodeData })
   | (NodeBase & { type: 'goto'; data: GotoNodeData })
+  | (NodeBase & { type: 'wait'; data: WaitNodeData })
   | (NodeBase & { type: 'screenshot'; data: ScreenshotNodeData });
 
 export interface BoardEdge {

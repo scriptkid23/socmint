@@ -80,6 +80,45 @@ describe('resolveChains', () => {
     expect(() => resolveChains(g)).toThrow(/no profile selected/i);
   });
 
+  it('includes wait nodes in the chain', () => {
+    const g = graph(
+      [
+        { id: 'p', type: 'profile', position: pos, data: { profileId: 'prof-1' } },
+        { id: 'g', type: 'goto', position: pos, data: { url: 'https://e' } },
+        { id: 'w', type: 'wait', position: pos, data: { ms: 1500 } },
+        { id: 's', type: 'screenshot', position: pos, data: {} },
+      ],
+      [
+        { id: 'e1', source: 'p', target: 'g' },
+        { id: 'e2', source: 'g', target: 'w' },
+        { id: 'e3', source: 'w', target: 's' },
+      ],
+    );
+
+    expect(resolveChains(g)).toEqual([
+      {
+        profileId: 'prof-1',
+        steps: [
+          { type: 'goto', url: 'https://e' },
+          { type: 'wait', ms: 1500 },
+          { type: 'screenshot' },
+        ],
+      },
+    ]);
+  });
+
+  it('throws when a wait node has invalid ms', () => {
+    const g = graph(
+      [
+        { id: 'p', type: 'profile', position: pos, data: { profileId: 'prof-1' } },
+        { id: 'w', type: 'wait', position: pos, data: { ms: 0 } },
+      ],
+      [{ id: 'e1', source: 'p', target: 'w' }],
+    );
+
+    expect(() => resolveChains(g)).toThrow(/ms/i);
+  });
+
   it('throws when a goto node has an empty url', () => {
     const g = graph(
       [

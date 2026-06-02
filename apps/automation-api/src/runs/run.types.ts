@@ -17,10 +17,11 @@ export interface RunRecord {
 /** A step as authored on a board (paths not yet resolved). */
 export type FlowStep =
   | { type: 'goto'; url: string; waitUntil?: WaitUntil; timeoutMs?: number }
+  | { type: 'wait'; ms: number }
   | { type: 'screenshot' };
 
 export interface FlowStepRecord {
-  type: 'goto' | 'screenshot';
+  type: 'goto' | 'wait' | 'screenshot';
   status: 'completed' | 'failed';
   error: string | null;
   /** goto only */

@@ -121,11 +121,15 @@ export class RunService {
       proxy: profile.proxy,
     };
 
-    const resolved: ResolvedFlowStep[] = steps.map((step, i) =>
-      step.type === 'screenshot'
-        ? { type: 'screenshot', screenshotPath: resolve(runDir, `step-${i}.png`) }
-        : { type: 'goto', url: step.url, waitUntil: step.waitUntil, timeoutMs: step.timeoutMs },
-    );
+    const resolved: ResolvedFlowStep[] = steps.map((step, i) => {
+      if (step.type === 'screenshot') {
+        return { type: 'screenshot', screenshotPath: resolve(runDir, `step-${i}.png`) };
+      }
+      if (step.type === 'wait') {
+        return { type: 'wait', ms: step.ms };
+      }
+      return { type: 'goto', url: step.url, waitUntil: step.waitUntil, timeoutMs: step.timeoutMs };
+    });
 
     let record: FlowRunRecord;
     try {

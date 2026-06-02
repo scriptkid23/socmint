@@ -23,10 +23,13 @@ import {
 import { validateGraph } from './graph-validation';
 import { ProfileNode } from './nodes/profile-node';
 import { GotoNode } from './nodes/goto-node';
+import { WaitNode } from './nodes/wait-node';
 import { ScreenshotNode } from './nodes/screenshot-node';
 import { Button } from '../ui/button';
 
-const nodeTypes = { profile: ProfileNode, goto: GotoNode, screenshot: ScreenshotNode };
+const DEFAULT_WAIT_MS = 3000;
+
+const nodeTypes = { profile: ProfileNode, goto: GotoNode, wait: WaitNode, screenshot: ScreenshotNode };
 
 let counter = 0;
 const newId = (prefix: string) => `${prefix}-${Date.now()}-${counter++}`;
@@ -50,6 +53,10 @@ function stripData(type: string | undefined, data: Record<string, unknown>): Boa
       url: (data.url as string) ?? '',
       waitUntil: data.waitUntil as WaitUntil | undefined,
     };
+  if (type === 'wait') {
+    const ms = Number(data.ms);
+    return { ms: Number.isFinite(ms) && ms > 0 ? ms : DEFAULT_WAIT_MS };
+  }
   return {};
 }
 
@@ -86,6 +93,13 @@ export function FlowCanvas({ board, profiles }: { board: Board; profiles: Profil
           onChange: (patch: Record<string, unknown>) => patchNodeData(id, patch),
         };
       }
+      if (type === 'wait') {
+        const ms = Number(data.ms);
+        return {
+          ms: Number.isFinite(ms) && ms > 0 ? ms : DEFAULT_WAIT_MS,
+          onChange: (nextMs: number) => patchNodeData(id, { ms: nextMs }),
+        };
+      }
       return {};
     },
     [profiles, patchNodeData],
@@ -113,10 +127,11 @@ export function FlowCanvas({ board, profiles }: { board: Board; profiles: Profil
     [setEdges],
   );
 
-  const addNode = (type: 'profile' | 'goto' | 'screenshot') => {
+  const addNode = (type: 'profile' | 'goto' | 'wait' | 'screenshot') => {
     const id = newId(type);
     const position = { x: 80 + Math.random() * 240, y: 80 + Math.random() * 240 };
-    setNodes((ns) => [...ns, { id, type, position, data: injectData(type, {}, id) }]);
+    const seed = type === 'wait' ? { ms: DEFAULT_WAIT_MS } : {};
+    setNodes((ns) => [...ns, { id, type, position, data: injectData(type, seed, id) }]);
   };
 
   useEffect(() => {
@@ -163,6 +178,9 @@ export function FlowCanvas({ board, profiles }: { board: Board; profiles: Profil
         </Button>
         <Button onClick={() => addNode('goto')} className="gap-1 text-xs">
           + Goto
+        </Button>
+        <Button onClick={() => addNode('wait')} className="gap-1 text-xs">
+          + Wait
         </Button>
         <Button onClick={() => addNode('screenshot')} className="gap-1 text-xs">
           + Screenshot

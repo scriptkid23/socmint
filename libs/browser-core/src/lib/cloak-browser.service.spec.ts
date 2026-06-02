@@ -272,6 +272,27 @@ describe('CloakBrowserService.runFlow', () => {
     expect(isClosed()).toBe(true);
   });
 
+  it('waits for the requested duration between steps', async () => {
+    jest.useFakeTimers();
+    try {
+      const { launcher, calls, isClosed } = makeFakes();
+      const svc = new CloakBrowserService(launcher);
+      const run = svc.runFlow(launch, [
+        { type: 'goto', url: 'https://example.com' },
+        { type: 'wait', ms: 2000 },
+      ]);
+
+      await jest.advanceTimersByTimeAsync(2000);
+      const results = await run;
+
+      expect(calls).toEqual(['goto:https://example.com']);
+      expect(results[1]).toMatchObject({ type: 'wait', status: 'completed', error: null });
+      expect(isClosed()).toBe(true);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('stops after a failed step and closes the context', async () => {
     const { launcher, calls, isClosed } = makeFakes({ failOnGoto: true });
     const svc = new CloakBrowserService(launcher);

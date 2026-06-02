@@ -18,11 +18,14 @@ export interface GotoNodeData {
   waitUntil?: WaitUntil;
   timeoutMs?: number;
 }
-export type BoardNodeData = ProfileNodeData | GotoNodeData | Record<string, never>;
+export interface WaitNodeData {
+  ms: number;
+}
+export type BoardNodeData = ProfileNodeData | GotoNodeData | WaitNodeData | Record<string, never>;
 
 export interface BoardNode {
   id: string;
-  type: 'profile' | 'goto' | 'screenshot';
+  type: 'profile' | 'goto' | 'wait' | 'screenshot';
   position: { x: number; y: number };
   data: BoardNodeData;
 }
@@ -44,7 +47,7 @@ export interface Board {
 }
 
 export interface FlowStepRecord {
-  type: 'goto' | 'screenshot';
+  type: 'goto' | 'wait' | 'screenshot';
   status: 'completed' | 'failed';
   error: string | null;
   title?: string;

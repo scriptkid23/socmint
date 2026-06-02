@@ -58,11 +58,12 @@ export interface InteractiveSession {
 /** A single executable step with all paths already resolved by the caller. */
 export type ResolvedFlowStep =
   | { type: 'goto'; url: string; waitUntil?: WaitUntil; timeoutMs?: number }
+  | { type: 'wait'; ms: number }
   | { type: 'screenshot'; screenshotPath: string };
 
 /** Per-step outcome returned by runFlow, in execution order. */
 export interface FlowStepResult {
-  type: 'goto' | 'screenshot';
+  type: 'goto' | 'wait' | 'screenshot';
   status: 'completed' | 'failed';
   error: string | null;
   /** goto only */

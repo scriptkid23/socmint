@@ -8,6 +8,66 @@ export interface Profile {
   updatedAt: string;
 }
 
+export type WaitUntil = 'load' | 'domcontentloaded' | 'commit';
+
+export interface ProfileNodeData {
+  profileId: string | null;
+}
+export interface GotoNodeData {
+  url: string;
+  waitUntil?: WaitUntil;
+  timeoutMs?: number;
+}
+export type BoardNodeData = ProfileNodeData | GotoNodeData | Record<string, never>;
+
+export interface BoardNode {
+  id: string;
+  type: 'profile' | 'goto' | 'screenshot';
+  position: { x: number; y: number };
+  data: BoardNodeData;
+}
+export interface BoardEdge {
+  id: string;
+  source: string;
+  target: string;
+}
+export interface BoardGraph {
+  nodes: BoardNode[];
+  edges: BoardEdge[];
+}
+export interface Board {
+  id: string;
+  name: string;
+  graph: BoardGraph;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FlowStepRecord {
+  type: 'goto' | 'screenshot';
+  status: 'completed' | 'failed';
+  error: string | null;
+  title?: string;
+  finalUrl?: string;
+  screenshot?: string | null;
+}
+export interface FlowRunRecord {
+  id: string;
+  profileId: string;
+  status: 'completed' | 'failed';
+  startedAt: string;
+  finishedAt: string;
+  error: string | null;
+  steps: FlowStepRecord[];
+}
+export interface BoardRunRecord {
+  id: string;
+  boardId: string;
+  startedAt: string;
+  finishedAt: string;
+  runs: FlowRunRecord[];
+}
+
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
     headers: { 'Content-Type': 'application/json' },
@@ -40,4 +100,13 @@ export const api = {
     }),
   closeLoginSession: (id: string) =>
     req<void>(`/profiles/${id}/login-session`, { method: 'DELETE' }),
+  listBoards: () => req<Board[]>('/boards'),
+  getBoard: (id: string) => req<Board>(`/boards/${id}`),
+  createBoard: (body: { name: string }) =>
+    req<Board>('/boards', { method: 'POST', body: JSON.stringify(body) }),
+  updateBoard: (id: string, body: { name?: string; graph?: BoardGraph }) =>
+    req<Board>(`/boards/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteBoard: (id: string) => req<void>(`/boards/${id}`, { method: 'DELETE' }),
+  runBoard: (id: string) =>
+    req<BoardRunRecord>(`/boards/${id}/run`, { method: 'POST' }),
 };

@@ -66,9 +66,9 @@ export function ProfileTable({
                     type="button"
                     disabled={busy}
                     onClick={() => onLogin(p.id)}
-                    className="gap-2"
+                    className="h-8 gap-1.5 px-3 py-1.5 text-[11px]"
                   >
-                    <LogIn size={16} strokeWidth={1.5} />
+                    <LogIn size={14} strokeWidth={1.5} />
                     Open login
                   </Button>
                   <Button
@@ -76,9 +76,9 @@ export function ProfileTable({
                     variant="outline"
                     disabled={busy}
                     onClick={() => onDelete(p.id)}
-                    className="gap-2"
+                    className="h-8 gap-1.5 px-3 py-1.5 text-[11px]"
                   >
-                    <Trash2 size={16} strokeWidth={1.5} />
+                    <Trash2 size={14} strokeWidth={1.5} />
                     Delete
                   </Button>
                 </div>

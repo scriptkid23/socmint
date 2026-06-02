@@ -6,11 +6,11 @@ import {
   resolveProfileDir,
   resolveUserDataDir,
 } from '@socmint/browser-core';
-import type { LaunchOptions, RunPageOptions } from '@socmint/browser-core';
+import type { LaunchOptions, RunPageOptions, ResolvedFlowStep } from '@socmint/browser-core';
 import { LockService } from '../profiles/lock.service';
 import { ProfileService } from '../profiles/profile.service';
 import { AuditLogger } from './audit.logger';
-import type { RunRecord } from './run.types';
+import type { RunRecord, FlowStep, FlowStepRecord, FlowRunRecord } from './run.types';
 
 export interface RunRequest {
   url: string;
@@ -97,6 +97,82 @@ export class RunService {
       profileId,
       runId,
       url: req.url,
+      timestamp: startedAt,
+    });
+
+    return record;
+  }
+
+  async executeFlow(profileId: string, steps: FlowStep[]): Promise<FlowRunRecord> {
+    const profile = await this.profiles.get(profileId);
+    const profileDir = resolveProfileDir(this.dataRoot, profileId);
+
+    await this.lock.acquire(profileDir, process.pid);
+
+    const runId = randomUUID();
+    const startedAt = new Date().toISOString();
+    const runDir = this.runDir(runId);
+    await mkdir(runDir, { recursive: true });
+
+    const launch: LaunchOptions = {
+      userDataDir: resolveUserDataDir(this.dataRoot, profileId),
+      headless: profile.launchDefaults.headless,
+      geoip: profile.launchDefaults.geoip,
+      proxy: profile.proxy,
+    };
+
+    const resolved: ResolvedFlowStep[] = steps.map((step, i) =>
+      step.type === 'screenshot'
+        ? { type: 'screenshot', screenshotPath: resolve(runDir, `step-${i}.png`) }
+        : { type: 'goto', url: step.url, waitUntil: step.waitUntil, timeoutMs: step.timeoutMs },
+    );
+
+    let record: FlowRunRecord;
+    try {
+      const stepResults = await this.browser.runFlow(launch, resolved);
+      const stepRecords: FlowStepRecord[] = stepResults.map((r, i) => ({
+        type: r.type,
+        status: r.status,
+        error: r.error,
+        title: r.title,
+        finalUrl: r.finalUrl,
+        screenshot:
+          r.type === 'screenshot'
+            ? r.status === 'completed'
+              ? `runs/${runId}/step-${i}.png`
+              : null
+            : undefined,
+      }));
+      const failed = stepResults.find((r) => r.status === 'failed');
+      record = {
+        id: runId,
+        profileId,
+        status: failed ? 'failed' : 'completed',
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        error: failed?.error ?? null,
+        steps: stepRecords,
+      };
+    } catch (err) {
+      record = {
+        id: runId,
+        profileId,
+        status: 'failed',
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        error: err instanceof Error ? err.message : String(err),
+        steps: [],
+      };
+    } finally {
+      await this.lock.release(profileDir);
+    }
+
+    await writeFile(resolve(runDir, 'result.json'), JSON.stringify(record, null, 2), 'utf8');
+    const firstGoto = steps.find((s): s is Extract<FlowStep, { type: 'goto' }> => s.type === 'goto');
+    await this.audit.append({
+      profileId,
+      runId,
+      url: firstGoto?.url ?? 'flow',
       timestamp: startedAt,
     });
 

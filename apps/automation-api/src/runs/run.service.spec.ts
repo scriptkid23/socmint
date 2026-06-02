@@ -136,3 +136,85 @@ describe('RunService.execute', () => {
     await rm(artifactsRoot, { recursive: true, force: true });
   });
 });
+
+describe('RunService.executeFlow', () => {
+  let dataRoot: string;
+  let artifactsRoot: string;
+  let profiles: ProfileService;
+  let lock: LockService;
+
+  beforeEach(async () => {
+    dataRoot = await mkdtemp(join(tmpdir(), 'rs-data-'));
+    artifactsRoot = await mkdtemp(join(tmpdir(), 'rs-art-'));
+    const store = new ProfileStore(dataRoot);
+    lock = new LockService(60000);
+    profiles = new ProfileService(store, lock, dataRoot);
+  });
+
+  afterEach(async () => {
+    await rm(dataRoot, { recursive: true, force: true });
+    await rm(artifactsRoot, { recursive: true, force: true });
+  });
+
+  function service(browser: Pick<CloakBrowserService, 'runFlow'>) {
+    return new RunService(
+      profiles,
+      lock,
+      browser as unknown as CloakBrowserService,
+      new AuditLogger(artifactsRoot),
+      dataRoot,
+      artifactsRoot,
+    );
+  }
+
+  it('runs a multi-step chain, writes result.json, maps screenshot to a relative path', async () => {
+    const profile = await profiles.create({ label: 'p1' });
+    const browser = {
+      runFlow: jest.fn().mockResolvedValue([
+        { type: 'goto', status: 'completed', error: null, title: 'T', finalUrl: 'https://e/' },
+        { type: 'screenshot', status: 'completed', error: null, screenshotPath: '/ignored.png' },
+      ]),
+    };
+    const svc = service(browser);
+
+    const rec = await svc.executeFlow(profile.id, [
+      { type: 'goto', url: 'https://e' },
+      { type: 'screenshot' },
+    ]);
+
+    expect(rec.status).toBe('completed');
+    expect(rec.steps).toHaveLength(2);
+    expect(rec.steps[1].screenshot).toBe(`runs/${rec.id}/step-1.png`);
+    const saved = JSON.parse(await readFile(resolve(artifactsRoot, 'runs', rec.id, 'result.json'), 'utf8'));
+    expect(saved.id).toBe(rec.id);
+    expect(await lock.isLocked(resolve(dataRoot, 'profiles', profile.id))).toBe(false);
+  });
+
+  it('marks the record failed when a step fails', async () => {
+    const profile = await profiles.create({ label: 'p2' });
+    const browser = {
+      runFlow: jest.fn().mockResolvedValue([
+        { type: 'goto', status: 'failed', error: 'nav boom', title: undefined, finalUrl: undefined },
+      ]),
+    };
+    const svc = service(browser);
+
+    const rec = await svc.executeFlow(profile.id, [{ type: 'goto', url: 'https://e' }]);
+
+    expect(rec.status).toBe('failed');
+    expect(rec.error).toBe('nav boom');
+  });
+
+  it('produces a failed record (and releases the lock) when launch throws', async () => {
+    const profile = await profiles.create({ label: 'p3' });
+    const browser = { runFlow: jest.fn().mockRejectedValue(new Error('launch boom')) };
+    const svc = service(browser);
+
+    const rec = await svc.executeFlow(profile.id, [{ type: 'goto', url: 'https://e' }]);
+
+    expect(rec.status).toBe('failed');
+    expect(rec.error).toBe('launch boom');
+    expect(rec.steps).toEqual([]);
+    expect(await lock.isLocked(resolve(dataRoot, 'profiles', profile.id))).toBe(false);
+  });
+});

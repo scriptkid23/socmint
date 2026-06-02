@@ -8,7 +8,7 @@ describe('loadConfig', () => {
     expect(cfg.artifactsRoot).toBe(resolve('./artifacts'));
     expect(cfg.profileLockTtlMs).toBe(180000);
     expect(cfg.host).toBe('127.0.0.1');
-    expect(cfg.port).toBe(3000);
+    expect(cfg.port).toBe(8081);
     expect(cfg.binaryPath).toBeNull();
   });
 

@@ -17,7 +17,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     artifactsRoot: resolve(env.ARTIFACTS_ROOT ?? './artifacts'),
     profileLockTtlMs: Number(env.PROFILE_LOCK_TTL_MS ?? 180000),
     host: env.HOST ?? '127.0.0.1',
-    port: Number(env.PORT ?? 3000),
+    port: Number(env.PORT ?? 8081),
     binaryPath: env.CLOAKBROWSER_BINARY_PATH ?? null,
   };
 }

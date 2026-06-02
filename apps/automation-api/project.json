@@ -54,10 +54,12 @@
       },
       "configurations": {
         "development": {
-          "buildTarget": "automation-api:build:development"
+          "buildTarget": "automation-api:build:development",
+          "inspect": false
         },
         "production": {
-          "buildTarget": "automation-api:build:production"
+          "buildTarget": "automation-api:build:production",
+          "inspect": false
         }
       }
     },

@@ -54,3 +54,21 @@ export interface InteractiveSession {
   /** Force-close the context (also triggers onClosed). */
   close(): Promise<void>;
 }
+
+/** A single executable step with all paths already resolved by the caller. */
+export type ResolvedFlowStep =
+  | { type: 'goto'; url: string; waitUntil?: WaitUntil; timeoutMs?: number }
+  | { type: 'screenshot'; screenshotPath: string };
+
+/** Per-step outcome returned by runFlow, in execution order. */
+export interface FlowStepResult {
+  type: 'goto' | 'screenshot';
+  status: 'completed' | 'failed';
+  error: string | null;
+  /** goto only */
+  title?: string;
+  /** goto only */
+  finalUrl?: string;
+  /** screenshot only; absolute path written, or null on failure */
+  screenshotPath?: string | null;
+}

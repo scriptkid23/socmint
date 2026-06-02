@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { ArrowRight } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -6,8 +6,14 @@ import { Dialog, DialogTrigger, DialogContent, DialogClose } from './ui/dialog';
 
 export function CreateProfileDialog({
   onCreate,
+  triggerLabel = 'Create profile',
+  triggerClassName = '',
+  triggerIcon,
 }: {
   onCreate: (body: { label: string; proxy: string | null }) => Promise<void>;
+  triggerLabel?: string;
+  triggerClassName?: string;
+  triggerIcon?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [label, setLabel] = useState('');
@@ -30,7 +36,10 @@ export function CreateProfileDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button>Create profile</Button>
+        <Button className={triggerClassName}>
+          {triggerIcon}
+          {triggerLabel}
+        </Button>
       </DialogTrigger>
       <DialogContent title="New profile">
         <div className="space-y-8">

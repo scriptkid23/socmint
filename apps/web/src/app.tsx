@@ -1,7 +1,9 @@
+import { Plus } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
 import { api } from './api/client';
 import { useProfiles } from './hooks/use-profiles';
-import { ProfileList } from './components/profile-list';
+import { ProfileNav } from './components/profile-nav';
+import { ProfileTable } from './components/profile-table';
 import { CreateProfileDialog } from './components/create-profile-dialog';
 
 export function App() {
@@ -39,28 +41,35 @@ export function App() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-16 md:px-8 lg:px-12">
-      <header className="mb-12">
-        <div className="flex items-end justify-between gap-6">
-          <h1 className="font-display text-6xl tracking-tighter md:text-8xl">PROFILES</h1>
-          <CreateProfileDialog onCreate={handleCreate} />
-        </div>
-        <div className="mt-6 flex items-center gap-4">
-          <div className="h-1 flex-1 bg-foreground" />
-          <div className="h-3 w-3 border border-foreground" />
-        </div>
-        <p className="mt-4 font-mono text-xs uppercase tracking-widest text-muted-foreground">
-          CloakBrowser session capture · local
-        </p>
-      </header>
+    <div className="flex min-h-screen">
+      <ProfileNav count={profiles.length} />
 
-      {error && (
-        <p className="mb-6 border-2 border-foreground bg-foreground px-4 py-3 font-mono text-xs uppercase tracking-widest text-background">
-          {error}
-        </p>
-      )}
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <header className="flex shrink-0 items-center justify-between gap-4 border-b-2 border-foreground px-8 py-6 lg:px-10">
+          <div>
+            <h1 className="font-display text-3xl tracking-tight">Profiles</h1>
+            <p className="mt-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+              CloakBrowser · session capture · local
+            </p>
+          </div>
+          <CreateProfileDialog
+            onCreate={handleCreate}
+            triggerLabel="New profile"
+            triggerClassName="gap-2"
+            triggerIcon={<Plus size={16} strokeWidth={1.5} />}
+          />
+        </header>
 
-      <ProfileList profiles={profiles} onLogin={handleLogin} onDelete={handleDelete} />
+        {error && (
+          <p className="mx-8 mt-4 shrink-0 border-2 border-foreground bg-foreground px-4 py-3 font-mono text-xs uppercase tracking-widest text-background lg:mx-10">
+            {error}
+          </p>
+        )}
+
+        <div className="min-h-0 flex-1 overflow-auto px-8 py-6 lg:px-10">
+          <ProfileTable profiles={profiles} onLogin={handleLogin} onDelete={handleDelete} />
+        </div>
+      </main>
 
       <Toaster
         position="bottom-right"

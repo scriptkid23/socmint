@@ -62,7 +62,6 @@ export class RunService {
 
     let record: RunRecord;
     try {
-      await this.profiles.setStatus(profileId, 'running');
       const page = await this.browser.runPage(launch, runOpts);
       record = {
         id: runId,
@@ -91,7 +90,6 @@ export class RunService {
       };
     } finally {
       await this.lock.release(profileDir);
-      await this.profiles.setStatus(profileId, 'idle');
     }
 
     await writeFile(resolve(runDir, 'result.json'), JSON.stringify(record, null, 2), 'utf8');

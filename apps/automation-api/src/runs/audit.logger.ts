@@ -1,12 +1,21 @@
 import { appendFile, mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-export interface AuditEntry {
+export interface RunAuditEntry {
   profileId: string;
   runId: string;
   url: string;
   timestamp: string;
 }
+
+export interface SessionAuditEntry {
+  profileId: string;
+  sessionId: string;
+  event: 'opened' | 'closed';
+  at: string;
+}
+
+export type AuditEntry = RunAuditEntry | SessionAuditEntry;
 
 export class AuditLogger {
   constructor(private readonly artifactsRoot: string) {}

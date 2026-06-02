@@ -25,10 +25,11 @@ describe('ProfileService', () => {
     await rm(dataRoot, { recursive: true, force: true });
   });
 
-  it('create assigns a UUID, sets idle status, and persists', async () => {
+  it('create assigns a UUID, sets idle status, null lastLoginAt, and persists', async () => {
     const p = await service.create({ label: 'inv-01' });
     expect(p.id).toMatch(/[0-9a-f-]{36}/);
     expect(p.status).toBe('idle');
+    expect(p.lastLoginAt).toBeNull();
     expect(p.userDataDir).toBe(`profiles/${p.id}/user-data`);
     expect(p.launchDefaults).toEqual({ headless: false, geoip: false });
     expect(await store.read(p.id)).toEqual(p);
@@ -50,6 +51,16 @@ describe('ProfileService', () => {
     const p = await service.create({ label: 'inv-01' });
     await lock.acquire(resolve(dataRoot, 'profiles', p.id), 123);
     await expect(service.update(p.id, { label: 'x' })).rejects.toBeInstanceOf(ProfileRunningError);
+  });
+
+  it('setStatus and setLastLoginAt persist', async () => {
+    const p = await service.create({ label: 'inv-01' });
+    await service.setStatus(p.id, 'authenticating');
+    expect((await service.get(p.id)).status).toBe('authenticating');
+    await service.setLastLoginAt(p.id, '2026-06-02T01:00:00.000Z');
+    const after = await service.get(p.id);
+    expect(after.lastLoginAt).toBe('2026-06-02T01:00:00.000Z');
+    expect(after.status).toBe('authenticating');
   });
 
   it('remove deletes an idle profile', async () => {

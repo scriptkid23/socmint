@@ -1,4 +1,4 @@
-export type ProfileStatus = 'idle' | 'running';
+export type ProfileStatus = 'idle' | 'authenticating';
 
 export interface LaunchDefaults {
   headless: boolean;
@@ -15,6 +15,7 @@ export interface ProfileMetadata {
   launchDefaults: LaunchDefaults;
   /** Display-only; the lock file is authoritative for concurrency. */
   status: ProfileStatus;
+  lastLoginAt: string | null;
   createdAt: string;
   updatedAt: string;
 }

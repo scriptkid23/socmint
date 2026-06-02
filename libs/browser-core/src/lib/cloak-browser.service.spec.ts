@@ -31,12 +31,25 @@ class FakePage implements PageLike {
 
 class FakeContext implements BrowserContextLike {
   public closed = false;
+  private closeListeners: Array<() => void> = [];
+
   constructor(public readonly page: FakePage) {}
+
+  pages() {
+    return [this.page];
+  }
+
   async newPage() {
     return this.page;
   }
+
+  on(_event: 'close', listener: () => void) {
+    this.closeListeners.push(listener);
+  }
+
   async close() {
     this.closed = true;
+    this.closeListeners.forEach((l) => l());
   }
 }
 
@@ -119,5 +132,80 @@ describe('CloakBrowserService.runPage', () => {
       'https://example.com',
       { waitUntil: 'domcontentloaded', timeout: 15000 },
     ]);
+  });
+});
+
+describe('CloakBrowserService.openInteractiveSession', () => {
+  class InteractiveFakeContext implements BrowserContextLike {
+    public closed = false;
+    public newPageCalls = 0;
+    private closeListeners: Array<() => void> = [];
+    constructor(private startPages: PageLike[] = []) {}
+    pages() {
+      return this.startPages;
+    }
+    async newPage() {
+      this.newPageCalls++;
+      const p = new FakePage();
+      this.startPages = [...this.startPages, p];
+      return p;
+    }
+    on(_event: 'close', listener: () => void) {
+      this.closeListeners.push(listener);
+    }
+    async close() {
+      this.closed = true;
+      this.emitClose();
+    }
+    emitClose() {
+      this.closeListeners.forEach((l) => l());
+    }
+  }
+
+  class InteractiveFakeLauncher implements BrowserLauncher {
+    public lastLaunch: LaunchOptions | null = null;
+    constructor(public readonly context: InteractiveFakeContext) {}
+    async ensureBinary() {}
+    async launchPersistentContext(opts: LaunchOptions) {
+      this.lastLaunch = opts;
+      return this.context;
+    }
+  }
+
+  it('forces headless:false and opens a window when none exists', async () => {
+    const context = new InteractiveFakeContext([]);
+    const launcher = new InteractiveFakeLauncher(context);
+    const service = new CloakBrowserService(launcher);
+    await service.openInteractiveSession({ userDataDir: '/d/u', headless: true });
+    expect(launcher.lastLaunch?.headless).toBe(false);
+    expect(context.newPageCalls).toBe(1);
+  });
+
+  it('does not open an extra page when one already exists', async () => {
+    const context = new InteractiveFakeContext([new FakePage()]);
+    const service = new CloakBrowserService(new InteractiveFakeLauncher(context));
+    await service.openInteractiveSession({ userDataDir: '/d/u' });
+    expect(context.newPageCalls).toBe(0);
+  });
+
+  it('fires onClosed exactly once when the window closes', async () => {
+    const context = new InteractiveFakeContext([new FakePage()]);
+    const service = new CloakBrowserService(new InteractiveFakeLauncher(context));
+    const session = await service.openInteractiveSession({ userDataDir: '/d/u' });
+    let calls = 0;
+    session.onClosed(() => {
+      calls++;
+    });
+    context.emitClose();
+    context.emitClose();
+    expect(calls).toBe(1);
+  });
+
+  it('close() closes the underlying context', async () => {
+    const context = new InteractiveFakeContext([new FakePage()]);
+    const service = new CloakBrowserService(new InteractiveFakeLauncher(context));
+    const session = await service.openInteractiveSession({ userDataDir: '/d/u' });
+    await session.close();
+    expect(context.closed).toBe(true);
   });
 });

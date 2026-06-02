@@ -24,14 +24,21 @@ describe('AuditLogger', () => {
     });
     await logger.append({
       profileId: 'p1',
-      runId: 'r2',
-      url: 'https://b',
-      timestamp: '2026-06-02T00:00:01.000Z',
+      sessionId: 's1',
+      event: 'opened',
+      at: '2026-06-02T00:00:00.000Z',
+    });
+    await logger.append({
+      profileId: 'p1',
+      sessionId: 's1',
+      event: 'closed',
+      at: '2026-06-02T00:01:00.000Z',
     });
     const raw = await readFile(resolve(artifactsRoot, 'audit.log'), 'utf8');
     const lines = raw.trim().split('\n');
-    expect(lines).toHaveLength(2);
+    expect(lines).toHaveLength(3);
     expect(JSON.parse(lines[0]).runId).toBe('r1');
-    expect(JSON.parse(lines[1]).runId).toBe('r2');
+    expect(JSON.parse(lines[1]).event).toBe('opened');
+    expect(JSON.parse(lines[2]).event).toBe('closed');
   });
 });

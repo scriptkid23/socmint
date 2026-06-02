@@ -44,6 +44,7 @@ export class ProfileService {
         geoip: dto.launchDefaults?.geoip ?? false,
       },
       status: 'idle',
+      lastLoginAt: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -84,6 +85,15 @@ export class ProfileService {
   async setStatus(id: string, status: ProfileMetadata['status']): Promise<void> {
     const profile = await this.get(id);
     await this.store.write({ ...profile, status, updatedAt: new Date().toISOString() });
+  }
+
+  async setLastLoginAt(id: string, iso: string): Promise<void> {
+    const profile = await this.get(id);
+    await this.store.write({
+      ...profile,
+      lastLoginAt: iso,
+      updatedAt: new Date().toISOString(),
+    });
   }
 
   async remove(id: string): Promise<void> {

@@ -34,6 +34,12 @@ class FakePage implements PageLike {
 
 class FakeContext implements BrowserContextLike {
   constructor(private readonly fail: boolean) {}
+  pages() {
+    return [];
+  }
+  on(_event: 'close', _listener: () => void) {
+    /* noop */
+  }
   async newPage() {
     return new FakePage({ fail: this.fail });
   }

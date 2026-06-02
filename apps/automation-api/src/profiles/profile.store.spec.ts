@@ -13,6 +13,7 @@ function sampleProfile(id: string): ProfileMetadata {
     fingerprintSeed: null,
     launchDefaults: { headless: false, geoip: false },
     status: 'idle',
+    lastLoginAt: null,
     createdAt: '2026-06-02T00:00:00.000Z',
     updatedAt: '2026-06-02T00:00:00.000Z',
   };

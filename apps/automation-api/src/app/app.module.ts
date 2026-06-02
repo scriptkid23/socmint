@@ -10,10 +10,12 @@ import { ProfileService } from '../profiles/profile.service';
 import { AuditLogger } from '../runs/audit.logger';
 import { RunService } from '../runs/run.service';
 import { RunsController } from '../runs/runs.controller';
+import { SessionRegistry } from '../sessions/session.registry';
+import { SessionsController } from '../sessions/sessions.controller';
 import { APP_CONFIG, AppConfig, loadConfig } from './config';
 
 @Module({
-  controllers: [ProfilesController, RunsController],
+  controllers: [ProfilesController, RunsController, SessionsController],
   providers: [
     { provide: APP_CONFIG, useFactory: () => loadConfig() },
     {
@@ -40,6 +42,17 @@ import { APP_CONFIG, AppConfig, loadConfig } from './config';
     {
       provide: CloakBrowserService,
       useFactory: () => new CloakBrowserService(new CloakBrowserLauncher()),
+    },
+    {
+      provide: SessionRegistry,
+      useFactory: (
+        profiles: ProfileService,
+        lock: LockService,
+        browser: CloakBrowserService,
+        audit: AuditLogger,
+        cfg: AppConfig,
+      ) => new SessionRegistry(profiles, lock, browser, audit, cfg.dataRoot),
+      inject: [ProfileService, LockService, CloakBrowserService, AuditLogger, APP_CONFIG],
     },
     {
       provide: RunService,

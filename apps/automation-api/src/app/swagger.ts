@@ -7,6 +7,7 @@ export function setupSwagger(app: INestApplication): void {
     .setDescription('Browser profile management and CloakBrowser automation runs')
     .setVersion('1.0')
     .addTag('profiles', 'Browser profile CRUD')
+    .addTag('sessions', 'Interactive login sessions')
     .addTag('runs', 'Automation run execution')
     .build();
 

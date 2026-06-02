@@ -22,3 +22,5 @@ tmp/
 Thumbs.db
 .idea/
 .vscode/
+vite.config.*.timestamp*
+vitest.config.*.timestamp*

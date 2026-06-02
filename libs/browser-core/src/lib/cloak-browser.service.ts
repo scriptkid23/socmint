@@ -1,5 +1,6 @@
 import type {
   BrowserLauncher,
+  InteractiveSession,
   LaunchOptions,
   RunPageOptions,
   RunPageResult,
@@ -36,5 +37,32 @@ export class CloakBrowserService {
     } finally {
       await context.close();
     }
+  }
+
+  /** Launch a visible, operator-driven window bound to a profile's userDataDir. */
+  async openInteractiveSession(launch: LaunchOptions): Promise<InteractiveSession> {
+    const context = await this.launcher.launchPersistentContext({ ...launch, headless: false });
+
+    if (context.pages().length === 0) {
+      await context.newPage();
+    }
+
+    const listeners: Array<() => void> = [];
+    let fired = false;
+    const fire = () => {
+      if (fired) return;
+      fired = true;
+      listeners.forEach((l) => l());
+    };
+    context.on('close', fire);
+
+    return {
+      onClosed(listener: () => void) {
+        listeners.push(listener);
+      },
+      async close() {
+        await context.close();
+      },
+    };
   }
 }

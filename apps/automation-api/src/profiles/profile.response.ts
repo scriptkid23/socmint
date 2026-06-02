@@ -27,8 +27,11 @@ export class ProfileResponseDto {
   @ApiProperty({ type: LaunchDefaultsResponseDto })
   launchDefaults!: LaunchDefaultsResponseDto;
 
-  @ApiProperty({ enum: ['idle', 'running'], example: 'idle' })
-  status!: 'idle' | 'running';
+  @ApiProperty({ enum: ['idle', 'authenticating'], example: 'idle' })
+  status!: 'idle' | 'authenticating';
+
+  @ApiProperty({ nullable: true, example: null })
+  lastLoginAt!: string | null;
 
   @ApiProperty({ format: 'date-time' })
   createdAt!: string;

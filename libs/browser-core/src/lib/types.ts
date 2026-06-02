@@ -36,6 +36,8 @@ export interface PageLike {
 
 export interface BrowserContextLike {
   newPage(): Promise<PageLike>;
+  pages(): PageLike[];
+  on(event: 'close', listener: () => void): void;
   close(): Promise<void>;
 }
 
@@ -43,4 +45,12 @@ export interface BrowserContextLike {
 export interface BrowserLauncher {
   ensureBinary(): Promise<void>;
   launchPersistentContext(opts: LaunchOptions): Promise<BrowserContextLike>;
+}
+
+/** Handle to a live, operator-driven browser window. */
+export interface InteractiveSession {
+  /** Fires exactly once when the context closes (window closed or close() called). */
+  onClosed(listener: () => void): void;
+  /** Force-close the context (also triggers onClosed). */
+  close(): Promise<void>;
 }

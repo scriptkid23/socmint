@@ -12,10 +12,18 @@ import { RunService } from '../runs/run.service';
 import { RunsController } from '../runs/runs.controller';
 import { SessionRegistry } from '../sessions/session.registry';
 import { SessionsController } from '../sessions/sessions.controller';
+import { BoardStore } from '../boards/board.store';
+import { BoardService } from '../boards/board.service';
+import { BoardsController } from '../boards/boards.controller';
 import { APP_CONFIG, AppConfig, loadConfig } from './config';
 
 @Module({
-  controllers: [ProfilesController, RunsController, SessionsController],
+  controllers: [
+    ProfilesController,
+    RunsController,
+    SessionsController,
+    BoardsController,
+  ],
   providers: [
     { provide: APP_CONFIG, useFactory: () => loadConfig() },
     {
@@ -64,6 +72,16 @@ import { APP_CONFIG, AppConfig, loadConfig } from './config';
         cfg: AppConfig,
       ) => new RunService(profiles, lock, browser, audit, cfg.dataRoot, cfg.artifactsRoot),
       inject: [ProfileService, LockService, CloakBrowserService, AuditLogger, APP_CONFIG],
+    },
+    {
+      provide: BoardStore,
+      useFactory: (cfg: AppConfig) => new BoardStore(cfg.dataRoot),
+      inject: [APP_CONFIG],
+    },
+    {
+      provide: BoardService,
+      useFactory: (store: BoardStore, runs: RunService) => new BoardService(store, runs),
+      inject: [BoardStore, RunService],
     },
   ],
 })

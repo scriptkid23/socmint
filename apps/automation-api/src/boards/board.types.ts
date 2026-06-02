@@ -12,6 +12,19 @@ export interface GotoNodeData {
 export interface WaitNodeData {
   ms: number;
 }
+export type AgentProvider = 'openai' | 'anthropic' | 'gemini' | 'ollama';
+export interface AgentNodeData {
+  prompt: string;
+  provider: AgentProvider;
+  model: string;
+  apiKey: string;
+  /** Ollama base URL (default http://127.0.0.1:11434). */
+  baseUrl?: string;
+  maxSteps?: number;
+  timeoutMs?: number;
+  allowDomains?: string[];
+  readOnly?: boolean;
+}
 export type ScreenshotNodeData = Record<string, never>;
 
 interface NodeBase {
@@ -23,6 +36,7 @@ export type BoardNode =
   | (NodeBase & { type: 'profile'; data: ProfileNodeData })
   | (NodeBase & { type: 'goto'; data: GotoNodeData })
   | (NodeBase & { type: 'wait'; data: WaitNodeData })
+  | (NodeBase & { type: 'agent'; data: AgentNodeData })
   | (NodeBase & { type: 'screenshot'; data: ScreenshotNodeData });
 
 export interface BoardEdge {

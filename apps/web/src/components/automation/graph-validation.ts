@@ -1,4 +1,10 @@
-import type { BoardGraph, GotoNodeData, ProfileNodeData, WaitNodeData } from '../../api/client';
+import type {
+  AgentNodeData,
+  BoardGraph,
+  GotoNodeData,
+  ProfileNodeData,
+  WaitNodeData,
+} from '../../api/client';
 
 export interface GraphError {
   nodeId: string;
@@ -36,6 +42,13 @@ export function validateGraph(graph: BoardGraph): GraphError[] {
       const ms = (node.data as WaitNodeData).ms;
       if (!Number.isFinite(ms) || ms <= 0) {
         errors.push({ nodeId: node.id, message: 'Wait duration must be greater than 0 ms' });
+      }
+    } else if (node.type === 'agent') {
+      const d = node.data as AgentNodeData;
+      if (!d.prompt?.trim()) errors.push({ nodeId: node.id, message: 'Agent prompt is empty' });
+      if (!d.model?.trim()) errors.push({ nodeId: node.id, message: 'Agent model is empty' });
+      if (d.provider !== 'ollama' && !d.apiKey?.trim()) {
+        errors.push({ nodeId: node.id, message: 'Agent API key is empty' });
       }
     }
   }

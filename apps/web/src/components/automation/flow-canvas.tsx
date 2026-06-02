@@ -24,12 +24,20 @@ import { validateGraph } from './graph-validation';
 import { ProfileNode } from './nodes/profile-node';
 import { GotoNode } from './nodes/goto-node';
 import { WaitNode } from './nodes/wait-node';
+import { AgentNode } from './nodes/agent-node';
 import { ScreenshotNode } from './nodes/screenshot-node';
 import { Button } from '../ui/button';
+import type { AgentProvider } from '../../api/client';
 
 const DEFAULT_WAIT_MS = 3000;
 
-const nodeTypes = { profile: ProfileNode, goto: GotoNode, wait: WaitNode, screenshot: ScreenshotNode };
+const nodeTypes = {
+  profile: ProfileNode,
+  goto: GotoNode,
+  wait: WaitNode,
+  agent: AgentNode,
+  screenshot: ScreenshotNode,
+};
 
 let counter = 0;
 const newId = (prefix: string) => `${prefix}-${Date.now()}-${counter++}`;
@@ -56,6 +64,18 @@ function stripData(type: string | undefined, data: Record<string, unknown>): Boa
   if (type === 'wait') {
     const ms = Number(data.ms);
     return { ms: Number.isFinite(ms) && ms > 0 ? ms : DEFAULT_WAIT_MS };
+  }
+  if (type === 'agent') {
+    return {
+      prompt: (data.prompt as string) ?? '',
+      provider: (data.provider as AgentProvider) ?? 'openai',
+      model: (data.model as string) ?? 'gpt-4o-mini',
+      apiKey: (data.apiKey as string) ?? '',
+      baseUrl: data.baseUrl as string | undefined,
+      maxSteps: data.maxSteps as number | undefined,
+      timeoutMs: data.timeoutMs as number | undefined,
+      readOnly: data.readOnly !== false,
+    };
   }
   return {};
 }
@@ -100,6 +120,19 @@ export function FlowCanvas({ board, profiles }: { board: Board; profiles: Profil
           onChange: (nextMs: number) => patchNodeData(id, { ms: nextMs }),
         };
       }
+      if (type === 'agent') {
+        return {
+          prompt: (data.prompt as string) ?? '',
+          provider: (data.provider as AgentProvider) ?? 'openai',
+          model: (data.model as string) ?? 'gpt-4o-mini',
+          apiKey: (data.apiKey as string) ?? '',
+          baseUrl: data.baseUrl as string | undefined,
+          maxSteps: data.maxSteps as number | undefined,
+          timeoutMs: data.timeoutMs as number | undefined,
+          readOnly: data.readOnly !== false,
+          onChange: (patch: Record<string, unknown>) => patchNodeData(id, patch),
+        };
+      }
       return {};
     },
     [profiles, patchNodeData],
@@ -127,10 +160,22 @@ export function FlowCanvas({ board, profiles }: { board: Board; profiles: Profil
     [setEdges],
   );
 
-  const addNode = (type: 'profile' | 'goto' | 'wait' | 'screenshot') => {
+  const addNode = (type: 'profile' | 'goto' | 'wait' | 'agent' | 'screenshot') => {
     const id = newId(type);
     const position = { x: 80 + Math.random() * 240, y: 80 + Math.random() * 240 };
-    const seed = type === 'wait' ? { ms: DEFAULT_WAIT_MS } : {};
+    const seed =
+      type === 'wait'
+        ? { ms: DEFAULT_WAIT_MS }
+        : type === 'agent'
+          ? {
+              prompt: '',
+              provider: 'openai',
+              model: 'gpt-4o-mini',
+              apiKey: '',
+              baseUrl: 'http://127.0.0.1:11434',
+              readOnly: true,
+            }
+          : {};
     setNodes((ns) => [...ns, { id, type, position, data: injectData(type, seed, id) }]);
   };
 
@@ -182,6 +227,9 @@ export function FlowCanvas({ board, profiles }: { board: Board; profiles: Profil
         <Button onClick={() => addNode('wait')} className="gap-1 text-xs">
           + Wait
         </Button>
+        <Button onClick={() => addNode('agent')} className="gap-1 text-xs">
+          + Agent
+        </Button>
         <Button onClick={() => addNode('screenshot')} className="gap-1 text-xs">
           + Screenshot
         </Button>
@@ -221,11 +269,24 @@ export function FlowCanvas({ board, profiles }: { board: Board; profiles: Profil
           <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
             Run results
           </p>
-          <ul className="space-y-1">
+          <ul className="space-y-2">
             {result.runs.map((r) => (
               <li key={r.id} className="font-mono text-xs">
-                {r.profileId} — {r.status}
-                {r.error ? ` (${r.error})` : ''}
+                <span>
+                  {r.profileId} — {r.status}
+                  {r.error ? ` (${r.error})` : ''}
+                </span>
+                {r.steps
+                  ?.filter((s) => s.type === 'agent')
+                  .map((s, i) => (
+                    <pre
+                      key={i}
+                      className="mt-1 max-h-32 overflow-auto border border-border-light p-2 text-[10px]"
+                    >
+                      agent: {s.status} · {s.stepsUsed ?? 0} steps · {s.stopReason ?? '—'}
+                      {s.result != null ? `\n${JSON.stringify(s.result, null, 2)}` : ''}
+                    </pre>
+                  ))}
               </li>
             ))}
           </ul>

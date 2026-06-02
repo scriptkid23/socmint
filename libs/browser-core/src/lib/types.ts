@@ -1,3 +1,7 @@
+import type { AgentLimits, AgentStopReason, AgentTask } from './agent/types';
+
+export type { AgentLimits, AgentStopReason, AgentTask } from './agent/types';
+
 /** Options passed through to CloakBrowser's launchPersistentContext. */
 export interface LaunchOptions {
   /** Absolute, already-resolved userDataDir. */
@@ -59,17 +63,37 @@ export interface InteractiveSession {
 export type ResolvedFlowStep =
   | { type: 'goto'; url: string; waitUntil?: WaitUntil; timeoutMs?: number }
   | { type: 'wait'; ms: number }
+  | { type: 'agent'; task: AgentTask; limits: AgentLimits; transcriptPath?: string }
   | { type: 'screenshot'; screenshotPath: string };
 
 /** Per-step outcome returned by runFlow, in execution order. */
-export interface FlowStepResult {
-  type: 'goto' | 'wait' | 'screenshot';
+export interface AgentFlowStepResult {
+  type: 'agent';
   status: 'completed' | 'failed';
   error: string | null;
-  /** goto only */
-  title?: string;
-  /** goto only */
-  finalUrl?: string;
-  /** screenshot only; absolute path written, or null on failure */
-  screenshotPath?: string | null;
+  stepsUsed: number;
+  stopReason: AgentStopReason;
+  result: unknown | null;
+  transcriptPath?: string | null;
 }
+
+export type FlowStepResult =
+  | {
+      type: 'goto';
+      status: 'completed' | 'failed';
+      error: string | null;
+      title?: string;
+      finalUrl?: string;
+    }
+  | {
+      type: 'wait';
+      status: 'completed' | 'failed';
+      error: string | null;
+    }
+  | AgentFlowStepResult
+  | {
+      type: 'screenshot';
+      status: 'completed' | 'failed';
+      error: string | null;
+      screenshotPath?: string | null;
+    };

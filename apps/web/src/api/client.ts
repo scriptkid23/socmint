@@ -21,11 +21,28 @@ export interface GotoNodeData {
 export interface WaitNodeData {
   ms: number;
 }
-export type BoardNodeData = ProfileNodeData | GotoNodeData | WaitNodeData | Record<string, never>;
+export type AgentProvider = 'openai' | 'anthropic' | 'gemini' | 'ollama';
+export interface AgentNodeData {
+  prompt: string;
+  provider: AgentProvider;
+  model: string;
+  apiKey: string;
+  baseUrl?: string;
+  maxSteps?: number;
+  timeoutMs?: number;
+  allowDomains?: string[];
+  readOnly?: boolean;
+}
+export type BoardNodeData =
+  | ProfileNodeData
+  | GotoNodeData
+  | WaitNodeData
+  | AgentNodeData
+  | Record<string, never>;
 
 export interface BoardNode {
   id: string;
-  type: 'profile' | 'goto' | 'wait' | 'screenshot';
+  type: 'profile' | 'goto' | 'wait' | 'agent' | 'screenshot';
   position: { x: number; y: number };
   data: BoardNodeData;
 }
@@ -47,12 +64,16 @@ export interface Board {
 }
 
 export interface FlowStepRecord {
-  type: 'goto' | 'wait' | 'screenshot';
+  type: 'goto' | 'wait' | 'agent' | 'screenshot';
   status: 'completed' | 'failed';
   error: string | null;
   title?: string;
   finalUrl?: string;
   screenshot?: string | null;
+  stepsUsed?: number;
+  stopReason?: 'finished' | 'max-steps' | 'timeout' | 'error';
+  result?: unknown;
+  transcript?: string;
 }
 export interface FlowRunRecord {
   id: string;

@@ -107,6 +107,83 @@ describe('resolveChains', () => {
     ]);
   });
 
+  it('maps agent node to FlowStep with allowDomains from prior goto', () => {
+    const g = graph(
+      [
+        { id: 'p', type: 'profile', position: pos, data: { profileId: 'prof-1' } },
+        { id: 'g', type: 'goto', position: pos, data: { url: 'https://www.facebook.com/' } },
+        {
+          id: 'a',
+          type: 'agent',
+          position: pos,
+          data: {
+            prompt: 'collect interactions',
+            provider: 'openai',
+            model: 'gpt-4o-mini',
+            apiKey: 'sk-x',
+          },
+        },
+      ],
+      [
+        { id: 'e1', source: 'p', target: 'g' },
+        { id: 'e2', source: 'g', target: 'a' },
+      ],
+    );
+    const jobs = resolveChains(g);
+    expect(jobs[0].steps[1]).toMatchObject({
+      type: 'agent',
+      prompt: 'collect interactions',
+      allowDomains: ['facebook.com'],
+      readOnly: true,
+      maxSteps: 25,
+    });
+  });
+
+  it('throws when agent node missing apiKey', () => {
+    const g = graph(
+      [
+        { id: 'p', type: 'profile', position: pos, data: { profileId: 'prof-1' } },
+        {
+          id: 'a',
+          type: 'agent',
+          position: pos,
+          data: { prompt: 'x', provider: 'openai', model: 'm', apiKey: '' },
+        },
+      ],
+      [{ id: 'e1', source: 'p', target: 'a' }],
+    );
+    expect(() => resolveChains(g)).toThrow(/apiKey/i);
+  });
+
+  it('allows ollama agent without apiKey and passes baseUrl', () => {
+    const g = graph(
+      [
+        { id: 'p', type: 'profile', position: pos, data: { profileId: 'prof-1' } },
+        {
+          id: 'a',
+          type: 'agent',
+          position: pos,
+          data: {
+            prompt: 'search',
+            provider: 'ollama',
+            model: 'llama3.2',
+            apiKey: '',
+            baseUrl: 'http://127.0.0.1:11434',
+          },
+        },
+      ],
+      [{ id: 'e1', source: 'p', target: 'a' }],
+    );
+    const jobs = resolveChains(g);
+    expect(jobs[0].steps[0]).toMatchObject({
+      type: 'agent',
+      provider: 'ollama',
+      model: 'llama3.2',
+      baseUrl: 'http://127.0.0.1:11434',
+      apiKey: '',
+    });
+  });
+
   it('throws when a wait node has invalid ms', () => {
     const g = graph(
       [

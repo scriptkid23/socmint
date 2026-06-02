@@ -1,3 +1,9 @@
+import { writeFile } from 'node:fs/promises';
+import { runAgent } from './agent/agent-runner';
+import { createLlmClient, type LlmClientConfig } from './agent/llm-client';
+import { redactTranscript } from './agent/redact';
+import { BrowserClosedError, sleepUntil, throwIfAborted, watchUserClosed } from './browser-user-close';
+import { asPageActions } from './playwright-page-actions';
 import type {
   BrowserLauncher,
   FlowStepResult,
@@ -15,6 +21,10 @@ const DEFAULT_TIMEOUT_MS = 60000;
  * Framework-agnostic browser runner. Depends only on a BrowserLauncher seam,
  * so it is unit-testable with a fake and reusable outside NestJS.
  */
+export interface RunFlowDeps {
+  createLlm?: (config: LlmClientConfig) => ReturnType<typeof createLlmClient>;
+}
+
 export class CloakBrowserService {
   constructor(private readonly launcher: BrowserLauncher) {}
 
@@ -45,13 +55,27 @@ export class CloakBrowserService {
    * Open one persistent context and execute steps sequentially. Stops at the
    * first failed step. Always closes the context.
    */
-  async runFlow(launch: LaunchOptions, steps: ResolvedFlowStep[]): Promise<FlowStepResult[]> {
+  async runFlow(
+    launch: LaunchOptions,
+    steps: ResolvedFlowStep[],
+    deps?: RunFlowDeps,
+  ): Promise<FlowStepResult[]> {
     const context = await this.launcher.launchPersistentContext(launch);
     const results: FlowStepResult[] = [];
+    let userClosed = false;
+    watchUserClosed(context, () => {
+      userClosed = true;
+    });
+    const isAborted = () => userClosed;
+
     try {
-      const page = await context.newPage();
+      const rawPage = await context.newPage();
+      const page = asPageActions(rawPage);
+      const createLlm = deps?.createLlm ?? createLlmClient;
+
       for (const step of steps) {
         try {
+          throwIfAborted(isAborted);
           if (step.type === 'goto') {
             await page.goto(step.url, {
               waitUntil: step.waitUntil ?? DEFAULT_WAIT_UNTIL,
@@ -65,12 +89,37 @@ export class CloakBrowserService {
               finalUrl: page.url(),
             });
           } else if (step.type === 'wait') {
-            await new Promise((resolve) => setTimeout(resolve, step.ms));
+            await sleepUntil(step.ms, isAborted);
             results.push({
               type: 'wait',
               status: 'completed',
               error: null,
             });
+          } else if (step.type === 'agent') {
+            const llm = createLlm({
+              provider: step.task.provider,
+              model: step.task.model,
+              apiKey: step.task.apiKey,
+              baseUrl: step.task.baseUrl,
+            });
+            const agentResult = await runAgent(page, step.task, llm, step.limits);
+            if (step.transcriptPath) {
+              await writeFile(
+                step.transcriptPath,
+                JSON.stringify(redactTranscript(agentResult.transcript), null, 2),
+                'utf8',
+              );
+            }
+            results.push({
+              type: 'agent',
+              status: agentResult.status,
+              error: agentResult.error,
+              stepsUsed: agentResult.stepsUsed,
+              stopReason: agentResult.stopReason,
+              result: agentResult.result,
+              transcriptPath: step.transcriptPath ?? null,
+            });
+            if (agentResult.status === 'failed') break;
           } else {
             await page.screenshot({ path: step.screenshotPath, fullPage: true });
             results.push({
@@ -81,12 +130,31 @@ export class CloakBrowserService {
             });
           }
         } catch (err) {
-          results.push({
-            type: step.type,
-            status: 'failed',
-            error: err instanceof Error ? err.message : String(err),
-            screenshotPath: step.type === 'screenshot' ? null : undefined,
-          });
+          const base = {
+            status: 'failed' as const,
+            error:
+              err instanceof BrowserClosedError
+                ? err.message
+                : err instanceof Error
+                  ? err.message
+                  : String(err),
+          };
+          if (step.type === 'goto') {
+            results.push({ type: 'goto', ...base });
+          } else if (step.type === 'wait') {
+            results.push({ type: 'wait', ...base });
+          } else if (step.type === 'agent') {
+            results.push({
+              type: 'agent',
+              ...base,
+              stepsUsed: 0,
+              stopReason: 'error',
+              result: null,
+              transcriptPath: step.transcriptPath ?? null,
+            });
+          } else {
+            results.push({ type: 'screenshot', ...base, screenshotPath: null });
+          }
           break;
         }
       }
@@ -111,7 +179,7 @@ export class CloakBrowserService {
       fired = true;
       listeners.forEach((l) => l());
     };
-    context.on('close', fire);
+    watchUserClosed(context, fire);
 
     return {
       onClosed(listener: () => void) {

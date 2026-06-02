@@ -205,6 +205,43 @@ describe('RunService.executeFlow', () => {
     expect(rec.error).toBe('nav boom');
   });
 
+  it('maps agent step results without apiKey in saved record', async () => {
+    const profile = await profiles.create({ label: 'p-agent' });
+    const browser = {
+      runFlow: jest.fn().mockResolvedValue([
+        {
+          type: 'agent',
+          status: 'completed',
+          error: null,
+          stepsUsed: 2,
+          stopReason: 'finished',
+          result: { items: [] },
+          transcriptPath: '/tmp/transcript.json',
+        },
+      ]),
+    };
+    const svc = service(browser);
+    const rec = await svc.executeFlow(profile.id, [
+      {
+        type: 'agent',
+        prompt: 'task',
+        provider: 'openai',
+        model: 'gpt-4o-mini',
+        apiKey: 'sk-secret',
+      },
+    ]);
+    expect(rec.steps[0]).toMatchObject({
+      type: 'agent',
+      status: 'completed',
+      result: { items: [] },
+      stepsUsed: 2,
+    });
+    const saved = JSON.parse(
+      await readFile(resolve(artifactsRoot, 'runs', rec.id, 'result.json'), 'utf8'),
+    );
+    expect(JSON.stringify(saved)).not.toContain('sk-secret');
+  });
+
   it('produces a failed record (and releases the lock) when launch throws', async () => {
     const profile = await profiles.create({ label: 'p3' });
     const browser = { runFlow: jest.fn().mockRejectedValue(new Error('launch boom')) };

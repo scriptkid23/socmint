@@ -40,6 +40,23 @@ describe('validateGraph', () => {
     expect(validateGraph(g).some((e) => e.nodeId === 'p')).toBe(true);
   });
 
+  it('flags missing agent fields', () => {
+    const g: BoardGraph = {
+      nodes: [
+        { id: 'p', type: 'profile', position: pos, data: { profileId: 'a' } },
+        {
+          id: 'a',
+          type: 'agent',
+          position: pos,
+          data: { prompt: '', provider: 'openai', model: '', apiKey: '' },
+        },
+      ],
+      edges: [{ id: 'e1', source: 'p', target: 'a' }],
+    };
+    const errs = validateGraph(g);
+    expect(errs.some((e) => e.nodeId === 'a')).toBe(true);
+  });
+
   it('flags an invalid wait duration', () => {
     const g: BoardGraph = {
       nodes: [

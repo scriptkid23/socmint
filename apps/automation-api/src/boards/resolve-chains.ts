@@ -2,6 +2,29 @@ import { BoardGraphError } from './board.errors';
 import type { BoardGraph, BoardNode } from './board.types';
 import type { FlowStep } from '../runs/run.types';
 
+function normalizeHost(hostname: string): string {
+  return hostname.replace(/^www\./, '').toLowerCase();
+}
+
+function hostFromUrl(url: string): string | null {
+  try {
+    return normalizeHost(new URL(url).hostname);
+  } catch {
+    return null;
+  }
+}
+
+function deriveAllowDomains(steps: FlowStep[]): string[] {
+  const hosts = new Set<string>();
+  for (const step of steps) {
+    if (step.type === 'goto') {
+      const h = hostFromUrl(step.url);
+      if (h) hosts.add(h);
+    }
+  }
+  return [...hosts];
+}
+
 export interface FlowJob {
   profileId: string;
   steps: FlowStep[];
@@ -71,8 +94,37 @@ export function resolveChains(graph: BoardGraph): FlowJob[] {
           throw new BoardGraphError(`Wait node ${target.id} must have ms > 0`);
         }
         steps.push({ type: 'wait', ms });
-      } else {
+      } else if (target.type === 'agent') {
+        const d = target.data;
+        if (!d.prompt?.trim()) {
+          throw new BoardGraphError(`Agent node ${target.id} has empty prompt`);
+        }
+        if (!d.model?.trim()) {
+          throw new BoardGraphError(`Agent node ${target.id} has empty model`);
+        }
+        if (d.provider !== 'ollama' && !d.apiKey?.trim()) {
+          throw new BoardGraphError(`Agent node ${target.id} has empty apiKey`);
+        }
+        const domains =
+          d.allowDomains?.length && d.allowDomains.length > 0
+            ? d.allowDomains.map(normalizeHost)
+            : deriveAllowDomains(steps);
+        steps.push({
+          type: 'agent',
+          prompt: d.prompt,
+          provider: d.provider,
+          model: d.model,
+          apiKey: d.apiKey ?? '',
+          baseUrl: d.baseUrl,
+          maxSteps: d.maxSteps ?? 25,
+          timeoutMs: d.timeoutMs ?? 300_000,
+          allowDomains: domains,
+          readOnly: d.readOnly ?? true,
+        });
+      } else if (target.type === 'screenshot') {
         steps.push({ type: 'screenshot' });
+      } else {
+        throw new BoardGraphError(`Unknown node type in chain: ${(target as BoardNode).type}`);
       }
       current = targetId;
     }

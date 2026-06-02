@@ -1,4 +1,5 @@
 import { CloakBrowserService } from './cloak-browser.service';
+import type { PageActions } from './agent/types';
 import type {
   BrowserContextLike,
   BrowserLauncher,
@@ -291,6 +292,83 @@ describe('CloakBrowserService.runFlow', () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+
+  it('runs an agent step via injected LLM', async () => {
+    const agentPage: PageActions = {
+      async goto(url) {
+        return undefined;
+      },
+      async title() {
+        return 'T';
+      },
+      url: () => 'https://example.com/',
+      async screenshot() {},
+      async click() {},
+      async type() {},
+      async pressEnter() {},
+      async scroll() {},
+      async readDom() {
+        return [{ index: 0, tag: 'button', role: 'button', text: 'Go', href: null }];
+      },
+    };
+    const context: BrowserContextLike = {
+      async newPage() {
+        return agentPage as unknown as PageLike;
+      },
+      pages() {
+        return [];
+      },
+      on() {},
+      async close() {},
+    };
+    const launcher: BrowserLauncher = {
+      async ensureBinary() {},
+      async launchPersistentContext() {
+        return context;
+      },
+    };
+    const svc = new CloakBrowserService(launcher);
+    const results = await svc.runFlow(
+      launch,
+      [
+        {
+          type: 'agent',
+          task: {
+            prompt: 'get data',
+            provider: 'openai',
+            model: 'gpt-4o-mini',
+            apiKey: 'sk-test',
+          },
+          limits: {
+            maxSteps: 5,
+            timeoutMs: 60_000,
+            allowDomains: ['example.com'],
+            readOnly: true,
+          },
+        },
+      ],
+      {
+        createLlm: () => ({
+          async complete() {
+            return {
+              content: JSON.stringify({
+                thought: 'done',
+                action: { type: 'finish', result: { ok: true } },
+                done: true,
+              }),
+            };
+          },
+        }),
+      },
+    );
+
+    expect(results[0]).toMatchObject({
+      type: 'agent',
+      status: 'completed',
+      stopReason: 'finished',
+      result: { ok: true },
+    });
   });
 
   it('stops after a failed step and closes the context', async () => {

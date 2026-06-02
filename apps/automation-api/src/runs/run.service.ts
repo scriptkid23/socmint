@@ -128,25 +128,57 @@ export class RunService {
       if (step.type === 'wait') {
         return { type: 'wait', ms: step.ms };
       }
+      if (step.type === 'agent') {
+        return {
+          type: 'agent',
+          task: {
+            prompt: step.prompt,
+            provider: step.provider,
+            model: step.model,
+            apiKey: step.apiKey,
+            baseUrl: step.baseUrl,
+          },
+          limits: {
+            maxSteps: step.maxSteps ?? 25,
+            timeoutMs: step.timeoutMs ?? 300_000,
+            allowDomains: step.allowDomains ?? [],
+            readOnly: step.readOnly ?? true,
+          },
+          transcriptPath: resolve(runDir, `step-${i}-agent-transcript.json`),
+        };
+      }
       return { type: 'goto', url: step.url, waitUntil: step.waitUntil, timeoutMs: step.timeoutMs };
     });
 
     let record: FlowRunRecord;
     try {
       const stepResults = await this.browser.runFlow(launch, resolved);
-      const stepRecords: FlowStepRecord[] = stepResults.map((r, i) => ({
-        type: r.type,
-        status: r.status,
-        error: r.error,
-        title: r.title,
-        finalUrl: r.finalUrl,
-        screenshot:
-          r.type === 'screenshot'
-            ? r.status === 'completed'
-              ? `runs/${runId}/step-${i}.png`
-              : null
-            : undefined,
-      }));
+      const stepRecords: FlowStepRecord[] = stepResults.map((r, i) => {
+        if (r.type === 'agent') {
+          return {
+            type: 'agent',
+            status: r.status,
+            error: r.error,
+            stepsUsed: r.stepsUsed,
+            stopReason: r.stopReason,
+            result: r.result,
+            transcript: r.transcriptPath ? `runs/${runId}/step-${i}-agent-transcript.json` : undefined,
+          };
+        }
+        return {
+          type: r.type,
+          status: r.status,
+          error: r.error,
+          title: r.type === 'goto' ? r.title : undefined,
+          finalUrl: r.type === 'goto' ? r.finalUrl : undefined,
+          screenshot:
+            r.type === 'screenshot'
+              ? r.status === 'completed'
+                ? `runs/${runId}/step-${i}.png`
+                : null
+              : undefined,
+        };
+      });
       const failed = stepResults.find((r) => r.status === 'failed');
       record = {
         id: runId,
@@ -173,10 +205,11 @@ export class RunService {
 
     await writeFile(resolve(runDir, 'result.json'), JSON.stringify(record, null, 2), 'utf8');
     const firstGoto = steps.find((s): s is Extract<FlowStep, { type: 'goto' }> => s.type === 'goto');
+    const hasAgent = steps.some((s) => s.type === 'agent');
     await this.audit.append({
       profileId,
       runId,
-      url: firstGoto?.url ?? 'flow',
+      url: firstGoto?.url ?? (hasAgent ? 'agent' : 'flow'),
       timestamp: startedAt,
     });
 

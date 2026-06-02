@@ -6,7 +6,7 @@
 
 **Architecture:** Nx (pnpm) monorepo. `libs/browser-core` wraps CloakBrowser behind a `BrowserLauncher` seam and exposes `openInteractiveSession` (visible window + close detection). `apps/automation-api` (NestJS) owns profile CRUD, an exclusive lock-file gate, and an in-process `SessionRegistry` that opens/closes interactive sessions and persists state. `apps/web` (React 19 + Vite + Tailwind + shadcn-style Radix primitives) drives it in a Minimalist Monochrome design, polling the API while a profile is authenticating.
 
-**Tech Stack:** pnpm, Nx, NestJS 10, TypeScript, Jest (API/lib), Vitest + React Testing Library (web), `cloakbrowser` + `playwright-core >= 1.53`, `class-validator`/`class-transformer`, React 19, Vite, Tailwind CSS 3.4, Radix UI, `@fontsource`, `lucide-react`, `sonner`.
+**Tech Stack:** pnpm, Nx, NestJS 10, TypeScript, Jest (API/lib), Vitest + React Testing Library (web), `cloakbrowser` + `playwright-core >= 1.53`, `class-validator`/`class-transformer`, React 19, Vite, `react-router-dom`, Tailwind CSS 3.4, Radix UI, `@fontsource`, `lucide-react`, `sonner`.
 
 **Decisions carried from the spec (2026-06-02):** local single-operator; manual window-close ends a session; exclusive `profile.lock` authoritative; SSRF not in scope (no run endpoint); `ensureBinary()` at bootstrap; `status ∈ idle | authenticating`; `lastLoginAt` added; run-automation deferred; UI is Minimalist Monochrome adapted to an admin tool with centralized tokens.
 
@@ -35,8 +35,11 @@
 - `api/client.ts` — typed fetch client + `Profile` type.
 - `hooks/use-profiles.ts` — list + conditional polling.
 - `components/ui/` — `button.tsx`, `input.tsx`, `dialog.tsx`, `badge.tsx`.
+- `components/layout/sidebar.tsx` — nav (shared by desktop aside + mobile drawer).
+- `components/layout/app-layout.tsx` — dashboard shell, mobile drawer, `<Outlet/>`, `<Toaster/>`.
 - `components/profile-list.tsx`, `components/create-profile-dialog.tsx`.
-- `app.tsx`, `main.tsx`.
+- `pages/profiles-page.tsx` — profile-management view (masthead + list + dialog + handlers).
+- `app.tsx` — `<Routes>` (router). `main.tsx` — `<BrowserRouter>` + mount.
 
 ---
 
@@ -1626,7 +1629,7 @@ Expected: `apps/web/` with `src/main.tsx`, `src/app/`, `vite.config.ts`, `index.
 - [ ] **Step 2: Install UI deps**
 
 ```bash
-pnpm add react@^19 react-dom@^19
+pnpm add react@^19 react-dom@^19 react-router-dom@^6
 pnpm add @radix-ui/react-dialog lucide-react sonner
 pnpm add @fontsource/playfair-display @fontsource/source-serif-4 @fontsource/jetbrains-mono
 pnpm add -D tailwindcss@^3.4 postcss autoprefixer @testing-library/react @testing-library/user-event @testing-library/jest-dom
@@ -2332,22 +2335,24 @@ Expected: PASS (2 tests).
 
 ---
 
-## Task 23: App shell — masthead, wiring, toasts
+## Task 23: ProfilesPage (profile-management view)
 
-**Files:** Create `apps/web/src/app.tsx`; Modify `apps/web/src/main.tsx`.
+**Files:** Create `apps/web/src/pages/profiles-page.tsx`.
 
-- [ ] **Step 1: Write the app shell**
+> This is the body that drives profile management. The `<Toaster/>` lives in `AppLayout` (Task 25), not here. No failing-test-first step — it is composed entirely of already-tested units (`useProfiles`, `ProfileList`, `CreateProfileDialog`); the routing test in Task 26 exercises it end-to-end.
 
-`apps/web/src/app.tsx`:
+- [ ] **Step 1: Write the page**
+
+`apps/web/src/pages/profiles-page.tsx`:
 
 ```tsx
-import { Toaster, toast } from 'sonner';
-import { api } from './api/client';
-import { useProfiles } from './hooks/use-profiles';
-import { ProfileList } from './components/profile-list';
-import { CreateProfileDialog } from './components/create-profile-dialog';
+import { toast } from 'sonner';
+import { api } from '../api/client';
+import { useProfiles } from '../hooks/use-profiles';
+import { ProfileList } from '../components/profile-list';
+import { CreateProfileDialog } from '../components/create-profile-dialog';
 
-export function App() {
+export function ProfilesPage() {
   const { profiles, error, refresh } = useProfiles();
 
   const handleCreate = async (body: { label: string; proxy: string | null }) => {
@@ -2404,6 +2409,207 @@ export function App() {
       )}
 
       <ProfileList profiles={profiles} onLogin={handleLogin} onDelete={handleDelete} />
+    </div>
+  );
+}
+```
+
+- [ ] **Step 2: Verify it builds + commit**
+
+```bash
+pnpm exec nx build web
+git add -A && git commit -m "feat(web): ProfilesPage view"
+```
+
+Expected: build succeeds.
+
+---
+
+## Task 24: Sidebar navigation (TDD)
+
+**Files:** Create `apps/web/src/components/layout/sidebar.tsx` + `sidebar.spec.tsx`.
+
+- [ ] **Step 1: Failing test**
+
+`apps/web/src/components/layout/sidebar.spec.tsx`:
+
+```tsx
+import { describe, it, expect } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import '@testing-library/jest-dom/vitest';
+import { Sidebar } from './sidebar';
+
+describe('Sidebar', () => {
+  it('renders the wordmark and an active Profiles link on /profiles', () => {
+    render(<MemoryRouter initialEntries={['/profiles']}><Sidebar /></MemoryRouter>);
+    expect(screen.getByText('SOCMINT')).toBeInTheDocument();
+    const link = screen.getByRole('link', { name: /profiles/i });
+    expect(link).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('Profiles link is not current on another route', () => {
+    render(<MemoryRouter initialEntries={['/other']}><Sidebar /></MemoryRouter>);
+    expect(screen.getByRole('link', { name: /profiles/i })).not.toHaveAttribute('aria-current', 'page');
+  });
+});
+```
+
+- [ ] **Step 2: Run — expect FAIL**
+
+```bash
+pnpm exec nx test web --testPathPattern=sidebar
+```
+
+Expected: FAIL (module not found).
+
+- [ ] **Step 3: Implement**
+
+`apps/web/src/components/layout/sidebar.tsx`:
+
+```tsx
+import { NavLink } from 'react-router-dom';
+
+const NAV = [{ to: '/profiles', label: 'Profiles' }];
+
+export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
+  return (
+    <nav className="flex h-full flex-col p-6">
+      <div className="font-display text-2xl tracking-tight">SOCMINT</div>
+      <div className="my-4 h-1 bg-foreground" />
+      <ul className="space-y-1">
+        {NAV.map((item) => (
+          <li key={item.to}>
+            <NavLink
+              to={item.to}
+              onClick={onNavigate}
+              className={({ isActive }) =>
+                'block px-3 py-2 font-mono text-xs uppercase tracking-widest transition-colors duration-100 ' +
+                'focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 ' +
+                (isActive ? 'bg-foreground text-background' : 'hover:underline')
+              }
+            >
+              {item.label}
+            </NavLink>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  );
+}
+```
+
+(React Router's `NavLink` sets `aria-current="page"` automatically on the active link.)
+
+- [ ] **Step 4: Run — expect PASS + commit**
+
+```bash
+pnpm exec nx test web --testPathPattern=sidebar
+git add -A && git commit -m "feat(web): monochrome Sidebar navigation"
+```
+
+Expected: PASS (2 tests).
+
+---
+
+## Task 25: AppLayout shell + mobile drawer (TDD)
+
+**Files:** Create `apps/web/src/components/layout/app-layout.tsx` + `app-layout.spec.tsx`.
+
+- [ ] **Step 1: Failing test**
+
+`apps/web/src/components/layout/app-layout.spec.tsx`:
+
+```tsx
+import { describe, it, expect } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import '@testing-library/jest-dom/vitest';
+import { AppLayout } from './app-layout';
+
+function renderLayout() {
+  return render(
+    <MemoryRouter initialEntries={['/profiles']}>
+      <Routes>
+        <Route element={<AppLayout />}>
+          <Route path="/profiles" element={<div>PAGE CONTENT</div>} />
+        </Route>
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+describe('AppLayout', () => {
+  it('renders the routed Outlet content', () => {
+    renderLayout();
+    expect(screen.getByText('PAGE CONTENT')).toBeInTheDocument();
+  });
+
+  it('hamburger opens the drawer navigation', async () => {
+    renderLayout();
+    await userEvent.click(screen.getByRole('button', { name: /open navigation/i }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: /profiles/i }).length).toBeGreaterThan(0);
+  });
+});
+```
+
+- [ ] **Step 2: Run — expect FAIL**
+
+```bash
+pnpm exec nx test web --testPathPattern=app-layout
+```
+
+Expected: FAIL (module not found).
+
+- [ ] **Step 3: Implement**
+
+`apps/web/src/components/layout/app-layout.tsx`:
+
+```tsx
+import { useState } from 'react';
+import { Outlet } from 'react-router-dom';
+import { Menu } from 'lucide-react';
+import { Toaster } from 'sonner';
+import * as RadixDialog from '@radix-ui/react-dialog';
+import { Sidebar } from './sidebar';
+
+export function AppLayout() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="min-h-full md:grid md:grid-cols-[16rem_1fr]">
+      {/* Desktop: fixed sidebar, thin black right border */}
+      <aside className="hidden border-r border-foreground md:block">
+        <Sidebar />
+      </aside>
+
+      {/* Mobile: top bar + off-canvas drawer */}
+      <div className="flex items-center justify-between border-b border-foreground p-4 md:hidden">
+        <span className="font-display text-xl tracking-tight">SOCMINT</span>
+        <RadixDialog.Root open={open} onOpenChange={setOpen}>
+          <RadixDialog.Trigger asChild>
+            <button
+              aria-label="Open navigation"
+              className="focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2"
+            >
+              <Menu size={24} strokeWidth={1.5} />
+            </button>
+          </RadixDialog.Trigger>
+          <RadixDialog.Portal>
+            <RadixDialog.Overlay className="fixed inset-0 z-40 bg-foreground/40" />
+            <RadixDialog.Content className="fixed inset-y-0 left-0 z-50 w-64 border-r border-foreground bg-background focus:outline-none">
+              <RadixDialog.Title className="sr-only">Navigation</RadixDialog.Title>
+              <Sidebar onNavigate={() => setOpen(false)} />
+            </RadixDialog.Content>
+          </RadixDialog.Portal>
+        </RadixDialog.Root>
+      </div>
+
+      <main className="min-w-0">
+        <Outlet />
+      </main>
 
       <Toaster
         position="bottom-right"
@@ -2420,9 +2626,81 @@ export function App() {
 }
 ```
 
-- [ ] **Step 2: Mount it in `main.tsx`**
+- [ ] **Step 4: Run — expect PASS + commit**
 
-Replace `apps/web/src/main.tsx` with the complete file (fonts + tokens from Task 17 must stay at the top):
+```bash
+pnpm exec nx test web --testPathPattern=app-layout
+git add -A && git commit -m "feat(web): AppLayout dashboard shell + mobile drawer"
+```
+
+Expected: PASS (2 tests).
+
+---
+
+## Task 26: Router wiring (TDD)
+
+**Files:** Create `apps/web/src/app.spec.tsx`; Modify `apps/web/src/app.tsx`, `apps/web/src/main.tsx`.
+
+- [ ] **Step 1: Failing test**
+
+`apps/web/src/app.spec.tsx`:
+
+```tsx
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import '@testing-library/jest-dom/vitest';
+import { App } from './app';
+import { api } from './api/client';
+
+describe('App routing', () => {
+  beforeEach(() => { vi.spyOn(api, 'listProfiles').mockResolvedValue([]); });
+
+  it('renders the Profiles view at /', async () => {
+    render(<MemoryRouter initialEntries={['/']}><App /></MemoryRouter>);
+    expect(await screen.findByRole('heading', { name: /profiles/i })).toBeInTheDocument();
+  });
+
+  it('redirects unknown paths to /profiles', async () => {
+    render(<MemoryRouter initialEntries={['/nope']}><App /></MemoryRouter>);
+    expect(await screen.findByRole('heading', { name: /profiles/i })).toBeInTheDocument();
+  });
+});
+```
+
+- [ ] **Step 2: Run — expect FAIL**
+
+```bash
+pnpm exec nx test web --testPathPattern=app.spec
+```
+
+Expected: FAIL — `App` still renders the old single-page shell (no router), so the `import` differs / the redirect test fails.
+
+- [ ] **Step 3: Replace `app.tsx` with the router**
+
+`apps/web/src/app.tsx`:
+
+```tsx
+import { Navigate, Route, Routes } from 'react-router-dom';
+import { AppLayout } from './components/layout/app-layout';
+import { ProfilesPage } from './pages/profiles-page';
+
+export function App() {
+  return (
+    <Routes>
+      <Route element={<AppLayout />}>
+        <Route index element={<ProfilesPage />} />
+        <Route path="/profiles" element={<ProfilesPage />} />
+        <Route path="*" element={<Navigate to="/profiles" replace />} />
+      </Route>
+    </Routes>
+  );
+}
+```
+
+- [ ] **Step 4: Wrap the app in `<BrowserRouter>` in `main.tsx`**
+
+Replace `apps/web/src/main.tsx` (fonts + tokens stay at the top):
 
 ```tsx
 import '@fontsource/playfair-display/400.css';
@@ -2434,28 +2712,32 @@ import './styles/theme.css';
 
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { BrowserRouter } from 'react-router-dom';
 import { App } from './app';
 
 createRoot(document.getElementById('root') as HTMLElement).render(
   <StrictMode>
-    <App />
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
   </StrictMode>,
 );
 ```
 
-- [ ] **Step 3: Build + full web tests + commit**
+- [ ] **Step 5: Run routing test + full web suite + build + commit**
 
 ```bash
-pnpm exec nx build web
+pnpm exec nx test web --testPathPattern=app.spec
 pnpm exec nx test web
-git add -A && git commit -m "feat(web): app shell with masthead, polling, toasts"
+pnpm exec nx build web
+git add -A && git commit -m "feat(web): dashboard router (BrowserRouter + Routes)"
 ```
 
-Expected: build succeeds; all web tests PASS.
+Expected: routing tests PASS; all web tests PASS; build succeeds.
 
 ---
 
-## Task 24: Final verification
+## Task 27: Final verification
 
 - [ ] **Step 1: Whole-repo test + build**
 
@@ -2478,14 +2760,16 @@ pnpm exec nx serve web
 ```
 
 Then in a browser at `http://127.0.0.1:4200`:
-1. Click **Create profile**, enter a label, click **Create & open browser** → a real Chromium window opens (success criterion 1).
-2. Log into a site in that window, then **close the window** → the row flips from "Opening browser —" to **Idle** with a `Last login` timestamp; confirm `data/profiles/<id>/user-data/` exists on disk (criterion 2).
-3. Click **Log in again** on that profile → the site still remembers the prior login (criterion 3).
-4. While a profile shows "Opening browser —", clicking its (disabled) actions does nothing; an extra `POST …/login-session` via the API returns **409** (criterion 4).
+1. The app loads as a dashboard: a fixed left **sidebar** (SOCMINT wordmark + active **Profiles** link) with the Profiles view on the right; `/` resolved to `/profiles` and an unknown path (e.g. `/nope`) redirects back to it (criterion 7).
+2. Click **Create profile**, enter a label, click **Create & open browser** → a real Chromium window opens (criterion 1).
+3. Log into a site in that window, then **close the window** → the row flips from "Opening browser —" to **Idle** with a `Last login` timestamp; confirm `data/profiles/<id>/user-data/` exists on disk (criterion 2).
+4. Click **Log in again** on that profile → the site still remembers the prior login (criterion 3).
+5. While a profile shows "Opening browser —", clicking its (disabled) actions does nothing; an extra `POST …/login-session` via the API returns **409** (criterion 4).
+6. Narrow the window to mobile width → the sidebar collapses; the **hamburger** opens a left drawer with the same nav (criterion 7).
 
 - [ ] **Step 3: Accessibility spot-check**
 
-Tab through the page: the Create button, dialog inputs (border thickens on focus), and row actions all show a visible 3px black focus outline (criterion 5).
+Tab through the page: the sidebar link, hamburger button, Create button, dialog inputs (border thickens on focus), and row actions all show a visible 3px black focus outline (criterion 5).
 
 - [ ] **Step 4: Final commit**
 
@@ -2518,6 +2802,9 @@ git add -A && git commit -m "chore: final verification" --allow-empty
 | Authenticating indicator (binary blink, not spinner) | 17, 21 |
 | Empty state (oversized serif) | 21 |
 | Vite dev proxy `/api`, conditional polling | 16, 18, 19 |
-| Accessibility (focus-visible, contrast, ≥44px) | 20, 21, 24 |
+| Dashboard shell: fixed sidebar (desktop) + hamburger drawer (mobile) | 24, 25 |
+| react-router: `/profiles`, `/` + unknown → `/profiles` | 26 |
+| Sidebar active-link inversion (`aria-current`) | 24 |
+| Accessibility (focus-visible, contrast, ≥44px) | 20, 21, 24, 25 |
 | `browser-core` zero `automation-api` imports; core no NestJS | 3–7 |
-| Success criteria 1–6 | 23, 24 |
+| Success criteria 1–7 | 23, 24, 25, 26, 27 |

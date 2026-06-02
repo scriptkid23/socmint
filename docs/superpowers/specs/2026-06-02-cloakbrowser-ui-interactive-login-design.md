@@ -67,12 +67,15 @@ socmint/
 │       └── src/
 │           ├── api/client.ts
 │           ├── hooks/use-profiles.ts
+│           ├── components/layout/sidebar.tsx       # NEW — nav (shared desktop + drawer)
+│           ├── components/layout/app-layout.tsx    # NEW — shell + mobile drawer + Outlet
 │           ├── components/profile-list.tsx
 │           ├── components/create-profile-dialog.tsx
-│           ├── components/ui/   # shadcn primitives (re-themed)
+│           ├── components/ui/   # themed primitives (button, input, badge, dialog)
+│           ├── pages/profiles-page.tsx             # NEW — profile mgmt view (was app.tsx body)
 │           ├── styles/theme.css # centralized design tokens
-│           ├── app.tsx
-│           └── main.tsx
+│           ├── app.tsx          # router (Routes)
+│           └── main.tsx         # BrowserRouter + mount
 └── libs/browser-core/src/lib/
     ├── types.ts                 # + on('close') on BrowserContextLike, InteractiveSession
     └── cloak-browser.service.ts # + openInteractiveSession
@@ -216,9 +219,20 @@ Pure black/white, serif-as-hero, zero radius, no shadows, line-based structure, 
 - Border weights: hairline `1px #E5E5E5`, thin `1px #000`, medium `2px #000`, thick `4px #000`.
 - Motion: instant/binary, ≤100ms transitions (color inversion on hover); 300ms only where explicitly editorial.
 
+### Dashboard shell & navigation
+
+The app is a **dashboard with a fixed left sidebar**, using `react-router-dom`:
+
+- **Routing:** `main.tsx` wraps the tree in `<BrowserRouter>`. `app.tsx` declares `<Routes>` with a single layout route (`AppLayout`) whose child `index` renders `ProfilesPage`; a catch-all `*` redirects to `/profiles`. (Only the Profiles route exists in this MVP; the router is in place so future tabs add a route + nav entry without restructuring.)
+- **`AppLayout`** (`components/layout/app-layout.tsx`): the shell.
+  - *Desktop (`md+`):* CSS grid `[aside w-64, thin 1px black right border | content]`; content renders `<Outlet/>`. `<Toaster/>` mounted once here.
+  - *Mobile:* the aside is hidden; a slim top bar shows the **SOCMINT** wordmark + a **hamburger** button (Lucide, `strokeWidth 1.5`, `aria-label`). The hamburger opens a **left off-canvas drawer** built on **Radix Dialog** (focus-trap + Esc for free) that renders the same `<Sidebar/>`.
+- **`Sidebar`** (`components/layout/sidebar.tsx`): **SOCMINT** wordmark (Playfair) at top → **thick 4px** rule → nav list of `NavLink`s. One item now: **Profiles**. Items are mono uppercase `tracking-widest`; the **active** link inverts (black bg / white text); hover underlines. Shared verbatim between the desktop aside and the mobile drawer (no markup duplication).
+- **`ProfilesPage`** (`pages/profiles-page.tsx`): owns the profile-management view (masthead + `CreateProfileDialog` + `ProfileList` + `useProfiles` polling + the create/login/delete handlers). This is the body that previously lived in `app.tsx`.
+
 ### Screens
 
-- **Masthead:** oversized Playfair `PROFILES` (`tracking-tight`), a **thick 4px** rule beneath, a small bordered square as visual punctuation; mono uppercase `tracking-widest` subtitle.
+- **Masthead** (inside `ProfilesPage`): oversized Playfair `PROFILES` (`tracking-tight`), a **thick 4px** rule beneath, a small bordered square as visual punctuation; mono uppercase `tracking-widest` subtitle.
 - **Profile table (editorial):** thin black borders, 0 radius, 0 shadow; column headers in mono uppercase; **rows invert** (black bg / white text) on hover at 100ms; `lastLoginAt`/`id` in JetBrains Mono; status `authenticating` = inverted (black) mono chip, `idle` = outlined chip; row actions: Log in again, Edit label, Delete.
 - **Create button:** primary black/white, uppercase `tracking-widest`, hover **invert**, trailing `→`.
 - **CreateProfileDialog:** sharp corners, `medium 2px` black border, no shadow; inputs with **2px bottom border** thickening to **4px** on focus, gray-italic placeholder, no colored ring.
@@ -231,8 +245,8 @@ Pure black/white, serif-as-hero, zero radius, no shadows, line-based structure, 
 ### UI ↔ API integration
 
 - API client (`fetch` wrapper) calls `/api/*`; **Vite dev proxy** maps `/api → http://127.0.0.1:3000` (avoids CORS in dev).
-- `useProfiles` hook: fetch list; poll every ~1.5s **only while** at least one profile is `authenticating`; stop when none are.
-- No additional state library (YAGNI).
+- `useProfiles(pollMs = 1500)` hook (in `ProfilesPage`): fetch list; poll **only while** at least one profile is `authenticating`; stop when none are. `pollMs` is injectable for deterministic tests.
+- Navigation is `react-router-dom` only; no global state-management library (YAGNI). The sidebar performs no API calls.
 
 ## Testing strategy (MVP)
 
@@ -240,7 +254,8 @@ Pure black/white, serif-as-hero, zero radius, no shadows, line-based structure, 
 |-------|--------|
 | Unit (`browser-core`) | `openInteractiveSession`: visible-window guard, `onClosed` fires once on synthetic `close`, `close()` closes context — via fake context. |
 | Unit (`automation-api`) | `SessionRegistry` with a fake `CloakBrowserService`: `open` acquires lock + sets `authenticating` + audits; simulated close → `cleanup` sets `idle` + `lastLoginAt` + releases lock; double `open` → 409; `open` launch-failure rolls back lock + status; `close()` force-cleans. Reuse prior `ProfileService`/`LockService`/`ProfileStore` tests. |
-| Component (`web`) | Vitest + React Testing Library with mocked fetch: `ProfileList` renders rows + status chips; `CreateProfileDialog` submits → calls create then login-session; polling hook flips a row from `authenticating` to `idle`. |
+| Component (`web`) | Vitest + React Testing Library with mocked fetch: `ProfileList` renders rows + status chips; `CreateProfileDialog` submits → calls create then login-session; `useProfiles` polls then stops when idle. |
+| Layout/routing (`web`) | `Sidebar` (in `MemoryRouter`) renders the wordmark + Profiles `NavLink` with `aria-current="page"` when active; `AppLayout` renders `<Outlet/>` content and the hamburger opens the drawer nav; unknown path redirects to `/profiles`. |
 | Manual smoke | Create → real Chromium opens → log into a site → close window → row shows `idle` + `lastLoginAt`; second `open` while active → 409. |
 
 ## Success criteria
@@ -251,8 +266,10 @@ Pure black/white, serif-as-hero, zero radius, no shadows, line-based structure, 
 4. A second login-session request while one is active returns **409**.
 5. The UI renders in true Minimalist Monochrome: pure black/white, serif headlines, zero radius, no shadows, all tokens centralized; passes `focus-visible` accessibility checks.
 6. `browser-core` has zero imports from `automation-api`; the core service has no NestJS import.
+7. The app is a dashboard with a fixed left sidebar (Profiles nav, active-link inversion) on desktop and a hamburger-opened drawer on mobile; `/` and unknown paths resolve to the Profiles view.
 
 ## Approval
 
 - **Brainstorming:** User approved local deployment, manual-close capture, profile-only UI scope, React 19 + Vite + Tailwind + shadcn/ui, lean MVP (run-automation deferred), Approach A (in-process session registry), and the Minimalist Monochrome design language adapted to an admin tool — all on 2026-06-02.
+- **Dashboard shell (2026-06-02):** User approved a dashboard with a fixed left sidebar + `react-router-dom`, a single **Profiles** nav item now, fixed sidebar on desktop with a hamburger off-canvas drawer on mobile.
 - **Next step:** Implementation plan via `writing-plans` skill (no code until plan approved).

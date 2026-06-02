@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { useProfiles } from './use-profiles';
 import { api, type Profile } from '../api/client';
 
@@ -51,7 +51,9 @@ describe('useProfiles', () => {
     const { result } = renderHook(() => useProfiles(50));
     await waitFor(() => expect(result.current.profiles[0]?.status).toBe('idle'));
 
-    await result.current.refresh();
+    await act(async () => {
+      await result.current.refresh();
+    });
     await waitFor(() => expect(result.current.profiles[0]?.status).toBe('authenticating'));
     await waitFor(() => expect(result.current.profiles[0]?.status).toBe('idle'));
     expect(calls).toBeGreaterThanOrEqual(3);

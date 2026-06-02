@@ -4,7 +4,15 @@ import type { ReactNode } from 'react';
 export const Dialog = RadixDialog.Root;
 export const DialogTrigger = RadixDialog.Trigger;
 
-export function DialogContent({ title, children }: { title: string; children: ReactNode }) {
+export function DialogContent({
+  title,
+  description = 'Dialog content',
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: ReactNode;
+}) {
   return (
     <RadixDialog.Portal>
       <RadixDialog.Overlay className="fixed inset-0 z-40 bg-foreground/40" />
@@ -15,6 +23,7 @@ export function DialogContent({ title, children }: { title: string; children: Re
         <RadixDialog.Title className="mb-6 font-display text-3xl tracking-tight">
           {title}
         </RadixDialog.Title>
+        <RadixDialog.Description className="sr-only">{description}</RadixDialog.Description>
         {children}
       </RadixDialog.Content>
     </RadixDialog.Portal>

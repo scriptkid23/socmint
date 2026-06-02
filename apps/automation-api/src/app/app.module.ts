@@ -1,0 +1,57 @@
+import { Module } from '@nestjs/common';
+import {
+  CloakBrowserLauncher,
+  CloakBrowserService,
+} from '@socmint/browser-core';
+import { ProfilesController } from '../profiles/profiles.controller';
+import { ProfileStore } from '../profiles/profile.store';
+import { LockService } from '../profiles/lock.service';
+import { ProfileService } from '../profiles/profile.service';
+import { AuditLogger } from '../runs/audit.logger';
+import { RunService } from '../runs/run.service';
+import { RunsController } from '../runs/runs.controller';
+import { APP_CONFIG, AppConfig, loadConfig } from './config';
+
+@Module({
+  controllers: [ProfilesController, RunsController],
+  providers: [
+    { provide: APP_CONFIG, useFactory: () => loadConfig() },
+    {
+      provide: ProfileStore,
+      useFactory: (cfg: AppConfig) => new ProfileStore(cfg.dataRoot),
+      inject: [APP_CONFIG],
+    },
+    {
+      provide: LockService,
+      useFactory: (cfg: AppConfig) => new LockService(cfg.profileLockTtlMs),
+      inject: [APP_CONFIG],
+    },
+    {
+      provide: ProfileService,
+      useFactory: (store: ProfileStore, lock: LockService, cfg: AppConfig) =>
+        new ProfileService(store, lock, cfg.dataRoot),
+      inject: [ProfileStore, LockService, APP_CONFIG],
+    },
+    {
+      provide: AuditLogger,
+      useFactory: (cfg: AppConfig) => new AuditLogger(cfg.artifactsRoot),
+      inject: [APP_CONFIG],
+    },
+    {
+      provide: CloakBrowserService,
+      useFactory: () => new CloakBrowserService(new CloakBrowserLauncher()),
+    },
+    {
+      provide: RunService,
+      useFactory: (
+        profiles: ProfileService,
+        lock: LockService,
+        browser: CloakBrowserService,
+        audit: AuditLogger,
+        cfg: AppConfig,
+      ) => new RunService(profiles, lock, browser, audit, cfg.dataRoot, cfg.artifactsRoot),
+      inject: [ProfileService, LockService, CloakBrowserService, AuditLogger, APP_CONFIG],
+    },
+  ],
+})
+export class AppModule {}

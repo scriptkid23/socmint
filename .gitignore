@@ -1,0 +1,25 @@
+# Runtime data (profiles, browser user-data)
+data/
+
+# Automation run outputs
+artifacts/
+
+# Dependencies & build
+node_modules/
+dist/
+.nx/cache/
+
+# Nx / TS build
+tmp/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.nx/

@@ -1,0 +1,19 @@
+{
+  "name": "browser-core",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/browser-core/src",
+  "projectType": "library",
+  "tags": [],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/browser-core",
+        "main": "libs/browser-core/src/index.ts",
+        "tsConfig": "libs/browser-core/tsconfig.lib.json",
+        "assets": ["libs/browser-core/*.md"]
+      }
+    }
+  }
+}

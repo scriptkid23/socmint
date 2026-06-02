@@ -2,8 +2,10 @@ import { CloakBrowserService } from './cloak-browser.service';
 import type {
   BrowserContextLike,
   BrowserLauncher,
+  FlowStepResult,
   LaunchOptions,
   PageLike,
+  ResolvedFlowStep,
 } from './types';
 
 class FakePage implements PageLike {
@@ -207,5 +209,82 @@ describe('CloakBrowserService.openInteractiveSession', () => {
     const session = await service.openInteractiveSession({ userDataDir: '/d/u' });
     await session.close();
     expect(context.closed).toBe(true);
+  });
+});
+
+describe('CloakBrowserService.runFlow', () => {
+  function makeFakes(opts?: { failOnGoto?: boolean }) {
+    const calls: string[] = [];
+    let closed = false;
+    const page: PageLike = {
+      async goto(url) {
+        calls.push(`goto:${url}`);
+        if (opts?.failOnGoto) throw new Error('nav boom');
+        return undefined;
+      },
+      async title() {
+        return 'Example Domain';
+      },
+      url() {
+        return 'https://example.com/';
+      },
+      async screenshot({ path }) {
+        calls.push(`shot:${path}`);
+        return undefined;
+      },
+    };
+    const context: BrowserContextLike = {
+      async newPage() {
+        return page;
+      },
+      pages() {
+        return [page];
+      },
+      on() {},
+      async close() {
+        closed = true;
+      },
+    };
+    const launcher: BrowserLauncher = {
+      async ensureBinary() {},
+      async launchPersistentContext() {
+        return context;
+      },
+    };
+    return { launcher, calls, isClosed: () => closed };
+  }
+
+  const launch: LaunchOptions = { userDataDir: '/tmp/x' };
+
+  it('runs steps in order and returns per-step results', async () => {
+    const { launcher, calls, isClosed } = makeFakes();
+    const svc = new CloakBrowserService(launcher);
+    const steps: ResolvedFlowStep[] = [
+      { type: 'goto', url: 'https://example.com' },
+      { type: 'screenshot', screenshotPath: '/abs/step-1.png' },
+    ];
+
+    const results: FlowStepResult[] = await svc.runFlow(launch, steps);
+
+    expect(calls).toEqual(['goto:https://example.com', 'shot:/abs/step-1.png']);
+    expect(results[0]).toMatchObject({ type: 'goto', status: 'completed', title: 'Example Domain', finalUrl: 'https://example.com/' });
+    expect(results[1]).toMatchObject({ type: 'screenshot', status: 'completed', screenshotPath: '/abs/step-1.png' });
+    expect(isClosed()).toBe(true);
+  });
+
+  it('stops after a failed step and closes the context', async () => {
+    const { launcher, calls, isClosed } = makeFakes({ failOnGoto: true });
+    const svc = new CloakBrowserService(launcher);
+    const steps: ResolvedFlowStep[] = [
+      { type: 'goto', url: 'https://example.com' },
+      { type: 'screenshot', screenshotPath: '/abs/step-1.png' },
+    ];
+
+    const results = await svc.runFlow(launch, steps);
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({ type: 'goto', status: 'failed', error: 'nav boom' });
+    expect(calls).toEqual(['goto:https://example.com']);
+    expect(isClosed()).toBe(true);
   });
 });

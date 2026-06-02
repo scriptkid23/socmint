@@ -1,7 +1,9 @@
 import type {
   BrowserLauncher,
+  FlowStepResult,
   InteractiveSession,
   LaunchOptions,
+  ResolvedFlowStep,
   RunPageOptions,
   RunPageResult,
 } from './types';
@@ -34,6 +36,54 @@ export class CloakBrowserService {
       }
 
       return { title, finalUrl, screenshotPath };
+    } finally {
+      await context.close();
+    }
+  }
+
+  /**
+   * Open one persistent context and execute steps sequentially. Stops at the
+   * first failed step. Always closes the context.
+   */
+  async runFlow(launch: LaunchOptions, steps: ResolvedFlowStep[]): Promise<FlowStepResult[]> {
+    const context = await this.launcher.launchPersistentContext(launch);
+    const results: FlowStepResult[] = [];
+    try {
+      const page = await context.newPage();
+      for (const step of steps) {
+        try {
+          if (step.type === 'goto') {
+            await page.goto(step.url, {
+              waitUntil: step.waitUntil ?? DEFAULT_WAIT_UNTIL,
+              timeout: step.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+            });
+            results.push({
+              type: 'goto',
+              status: 'completed',
+              error: null,
+              title: await page.title(),
+              finalUrl: page.url(),
+            });
+          } else {
+            await page.screenshot({ path: step.screenshotPath, fullPage: true });
+            results.push({
+              type: 'screenshot',
+              status: 'completed',
+              error: null,
+              screenshotPath: step.screenshotPath,
+            });
+          }
+        } catch (err) {
+          results.push({
+            type: step.type,
+            status: 'failed',
+            error: err instanceof Error ? err.message : String(err),
+            screenshotPath: step.type === 'screenshot' ? null : undefined,
+          });
+          break;
+        }
+      }
+      return results;
     } finally {
       await context.close();
     }

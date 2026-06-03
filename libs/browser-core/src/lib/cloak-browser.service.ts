@@ -5,6 +5,10 @@ import { redactTranscript } from './agent/redact';
 import { BrowserClosedError, sleepUntil, throwIfAborted, watchUserClosed } from './browser-user-close';
 import { InteractionRecorder } from './interaction-recorder';
 import { asPageActions } from './playwright-page-actions';
+import { WalletHandler } from './wallet/wallet-handler';
+import { createViemSigner } from './wallet/viem-signer';
+import { buildWalletInitScript, WALLET_BINDING_NAME } from './wallet/provider-injection';
+import type { WalletRpcResult } from './wallet/wallet.types';
 import type {
   BrowserLauncher,
   FlowStepResult,
@@ -126,7 +130,29 @@ export class CloakBrowserService {
               transcriptPath: step.transcriptPath ?? null,
             });
             if (agentResult.status === 'failed') break;
-          } else {
+          } else if (step.type === 'wallet') {
+            const signer = createViemSigner(step.privateKey);
+            const handler = new WalletHandler(
+              { privateKey: step.privateKey, chains: step.chains, activeChainId: step.activeChainId },
+              signer,
+            );
+            await context.exposeFunction(
+              WALLET_BINDING_NAME,
+              async (arg: unknown): Promise<WalletRpcResult> => {
+                const { method, params } = (arg ?? {}) as { method: string; params?: unknown[] };
+                try {
+                  return { ok: true, result: await handler.handle({ method, params }) };
+                } catch (e) {
+                  const code = (e as { code?: number }).code ?? 4200;
+                  return { ok: false, error: { code, message: e instanceof Error ? e.message : String(e) } };
+                }
+              },
+            );
+            await context.addInitScript(
+              buildWalletInitScript(handler.address, handler.activeChainIdHex),
+            );
+            results.push({ type: 'wallet', status: 'completed', error: null });
+          } else if (step.type === 'screenshot') {
             await page.screenshot({ path: step.screenshotPath, fullPage: true });
             results.push({
               type: 'screenshot',
@@ -158,7 +184,9 @@ export class CloakBrowserService {
               result: null,
               transcriptPath: step.transcriptPath ?? null,
             });
-          } else {
+          } else if (step.type === 'wallet') {
+            results.push({ type: 'wallet', ...base });
+          } else if (step.type === 'screenshot') {
             results.push({ type: 'screenshot', ...base, screenshotPath: null });
           }
           break;

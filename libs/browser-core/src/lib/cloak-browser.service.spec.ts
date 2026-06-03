@@ -54,6 +54,14 @@ class FakeContext implements BrowserContextLike {
     this.closed = true;
     this.closeListeners.forEach((l) => l());
   }
+
+  async addInitScript() {
+    /* noop */
+  }
+
+  async exposeFunction() {
+    /* noop */
+  }
 }
 
 class FakeLauncher implements BrowserLauncher {
@@ -163,6 +171,12 @@ describe('CloakBrowserService.openInteractiveSession', () => {
     emitClose() {
       this.closeListeners.forEach((l) => l());
     }
+    async addInitScript() {
+      /* noop */
+    }
+    async exposeFunction() {
+      /* noop */
+    }
   }
 
   class InteractiveFakeLauncher implements BrowserLauncher {
@@ -248,6 +262,7 @@ describe('CloakBrowserService.runFlow', () => {
         closed = true;
       },
       exposeBinding: async () => {},
+      exposeFunction: async () => {},
       addInitScript: async () => {},
     } as BrowserContextLike;
     const launcher: BrowserLauncher = {
@@ -325,6 +340,8 @@ describe('CloakBrowserService.runFlow', () => {
       },
       on() {},
       async close() {},
+      async addInitScript() {},
+      async exposeFunction() {},
     };
     const launcher: BrowserLauncher = {
       async ensureBinary() {},
@@ -389,6 +406,66 @@ describe('CloakBrowserService.runFlow', () => {
     expect(results[0]).toMatchObject({ type: 'goto', status: 'failed', error: 'nav boom' });
     expect(calls).toEqual(['goto:https://example.com']);
     expect(isClosed()).toBe(true);
+  });
+
+  it('sets up the wallet provider via exposeFunction + addInitScript', async () => {
+    const exposed: Record<string, (arg: unknown) => unknown> = {};
+    const initScripts: string[] = [];
+    const page = {
+      async goto() {},
+      async title() {
+        return 'T';
+      },
+      url() {
+        return 'https://dapp.example/';
+      },
+      async screenshot() {},
+      on() {},
+    } as unknown as PageLike;
+    const context: BrowserContextLike = {
+      async newPage() {
+        return page;
+      },
+      pages() {
+        return [page];
+      },
+      on() {},
+      async close() {},
+      async addInitScript(s: string) {
+        initScripts.push(s);
+      },
+      async exposeFunction(name: string, cb: (arg: unknown) => unknown) {
+        exposed[name] = cb;
+      },
+    };
+    const launcher: BrowserLauncher = {
+      async ensureBinary() {},
+      async launchPersistentContext() {
+        return context;
+      },
+    };
+    const svc = new CloakBrowserService(launcher);
+
+    const { results } = await svc.runFlow(launch, [
+      {
+        type: 'wallet',
+        privateKey: '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
+        chains: [{ chainId: 1, rpcUrl: 'https://eth.example', name: 'Ethereum' }],
+        activeChainId: 1,
+      },
+    ]);
+
+    expect(results[0]).toMatchObject({ type: 'wallet', status: 'completed', error: null });
+    expect(Object.keys(exposed)).toContain('__cloakWalletRequest');
+    expect(initScripts).toHaveLength(1);
+
+    // The exposed binding routes through the handler and returns the address envelope.
+    const envelope = (await exposed['__cloakWalletRequest']({
+      method: 'eth_requestAccounts',
+      params: [],
+    })) as { ok: boolean; result: string[] };
+    expect(envelope.ok).toBe(true);
+    expect(envelope.result[0]).toBe('0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266');
   });
 
   it('keeps browser open for recording when requested', async () => {

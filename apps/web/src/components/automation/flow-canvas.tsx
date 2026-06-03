@@ -15,32 +15,23 @@ import {
   api,
   type Board,
   type BoardGraph,
-  type BoardNodeData,
   type BoardRunRecord,
   type Profile,
   type RecordedStep,
-  type WaitUntil,
 } from '../../api/client';
 import { validateGraph } from './graph-validation';
-import { ProfileNode } from './nodes/profile-node';
-import { GotoNode } from './nodes/goto-node';
-import { WaitNode } from './nodes/wait-node';
-import { AgentNode } from './nodes/agent-node';
-import { ScreenshotNode } from './nodes/screenshot-node';
-import { RecordNode } from './nodes/record-node';
+import {
+  NODE_DESCRIPTORS,
+  NODE_ORDER,
+  type NodeRuntimeContext,
+  type NodeType,
+  defaultNodeData,
+  injectNodeData,
+  nodeTypes,
+  resolveUpstreamProfile,
+  serializeNodeData,
+} from './nodes/registry';
 import { Button } from '../ui/button';
-import type { AgentProvider } from '../../api/client';
-
-const DEFAULT_WAIT_MS = 3000;
-
-const nodeTypes = {
-  profile: ProfileNode,
-  goto: GotoNode,
-  wait: WaitNode,
-  agent: AgentNode,
-  screenshot: ScreenshotNode,
-  record: RecordNode,
-};
 
 let counter = 0;
 const newId = (prefix: string) => `${prefix}-${Date.now()}-${counter++}`;
@@ -51,7 +42,7 @@ function toGraph(nodes: Node[], edges: Edge[]): BoardGraph {
       id: n.id,
       type: n.type as BoardGraph['nodes'][number]['type'],
       position: n.position,
-      data: stripData(n.type, n.data as Record<string, unknown>),
+      data: serializeNodeData(n.type, n.data as Record<string, unknown>),
     })),
     edges: edges.map((e) => ({ id: e.id, source: e.source, target: e.target })),
   };
@@ -70,51 +61,6 @@ function chainEndsWithRecord(profileNodeId: string, nodes: Node[], edges: Edge[]
   return lastType === 'record';
 }
 
-function resolveUpstreamProfile(
-  nodeId: string,
-  nodes: Node[],
-  edges: Edge[],
-): string | null {
-  const incoming = edges.find((e) => e.target === nodeId);
-  if (!incoming) return null;
-  const source = nodes.find((n) => n.id === incoming.source);
-  if (!source) return null;
-  if (source.type === 'profile') {
-    return (source.data as { profileId?: string | null }).profileId ?? null;
-  }
-  return resolveUpstreamProfile(source.id, nodes, edges);
-}
-
-function stripData(type: string | undefined, data: Record<string, unknown>): BoardNodeData {
-  if (type === 'profile') return { profileId: (data.profileId as string | null) ?? null };
-  if (type === 'goto')
-    return {
-      url: (data.url as string) ?? '',
-      waitUntil: data.waitUntil as WaitUntil | undefined,
-    };
-  if (type === 'wait') {
-    const ms = Number(data.ms);
-    return { ms: Number.isFinite(ms) && ms > 0 ? ms : DEFAULT_WAIT_MS };
-  }
-  if (type === 'agent') {
-    return {
-      prompt: (data.prompt as string) ?? '',
-      provider: (data.provider as AgentProvider) ?? 'openai',
-      model: (data.model as string) ?? 'gpt-4o-mini',
-      apiKey: (data.apiKey as string) ?? '',
-      baseUrl: data.baseUrl as string | undefined,
-      maxSteps: data.maxSteps as number | undefined,
-      timeoutMs: data.timeoutMs as number | undefined,
-      restrictToGotoDomains: data.restrictToGotoDomains === true,
-      readOnly: data.readOnly !== false,
-    };
-  }
-  if (type === 'record') {
-    return { steps: (data.steps as RecordedStep[]) ?? [] };
-  }
-  return {};
-}
-
 export function FlowCanvas({ board, profiles }: { board: Board; profiles: Profile[] }) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -129,11 +75,53 @@ export function FlowCanvas({ board, profiles }: { board: Board; profiles: Profil
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hydrated = useRef(false);
 
+  const persistBoardNow = useCallback(
+    async (nodesSnapshot: Node[]) => {
+      if (saveTimer.current) {
+        clearTimeout(saveTimer.current);
+        saveTimer.current = null;
+      }
+      setSaving(true);
+      try {
+        await api.updateBoard(board.id, { graph: toGraph(nodesSnapshot, edgesRef.current) });
+      } finally {
+        setSaving(false);
+      }
+    },
+    [board.id],
+  );
+
   const patchNodeData = useCallback(
     (id: string, patch: Record<string, unknown>) => {
       setNodes((ns) => ns.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...patch } } : n)));
     },
     [setNodes],
+  );
+
+  // Lazily-read ref so makeContext can hand record nodes a generateGotoChain
+  // without a circular useCallback dependency.
+  const generateGotoChainRef = useRef<(recordNodeId: string, steps: RecordedStep[]) => void>(
+    () => {},
+  );
+
+  const makeContext = useCallback(
+    (id: string): NodeRuntimeContext => ({
+      id,
+      profiles,
+      patch: (patch) => patchNodeData(id, patch),
+      getNodes: () => nodesRef.current,
+      getEdges: () => edgesRef.current,
+      persistNodes: persistBoardNow,
+      generateGotoChain: (recordNodeId, steps) =>
+        generateGotoChainRef.current(recordNodeId, steps),
+    }),
+    [profiles, patchNodeData, persistBoardNow],
+  );
+
+  const injectNode = useCallback(
+    (type: string, data: Record<string, unknown>, id: string) =>
+      injectNodeData(type, data, makeContext(id)),
+    [makeContext],
   );
 
   const generateGotoChain = useCallback(
@@ -159,11 +147,7 @@ export function FlowCanvas({ board, profiles }: { board: Board; profiles: Profil
             x: recordNode.position.x + 220 * (i + 1),
             y: recordNode.position.y,
           },
-          data: {
-            url: s.url.trim(),
-            waitUntil: 'load' as WaitUntil,
-            onChange: (patch: Record<string, unknown>) => patchNodeData(gid, patch),
-          },
+          data: injectNode('goto', { url: s.url.trim(), waitUntil: 'load' }, gid),
         };
       });
 
@@ -185,85 +169,16 @@ export function FlowCanvas({ board, profiles }: { board: Board; profiles: Profil
         return [...withoutOld, ...newEdges];
       });
     },
-    [setNodes, setEdges, patchNodeData],
+    [setNodes, setEdges, injectNode],
   );
-
-  const injectData = useCallback(
-    (type: string, data: Record<string, unknown>, id: string) => {
-      if (type === 'profile') {
-        return {
-          profileId: (data.profileId as string | null) ?? null,
-          profiles,
-          onChange: (profileId: string | null) => patchNodeData(id, { profileId }),
-        };
-      }
-      if (type === 'goto') {
-        return {
-          url: (data.url as string) ?? '',
-          waitUntil: data.waitUntil as WaitUntil | undefined,
-          onChange: (patch: Record<string, unknown>) => patchNodeData(id, patch),
-        };
-      }
-      if (type === 'wait') {
-        const ms = Number(data.ms);
-        return {
-          ms: Number.isFinite(ms) && ms > 0 ? ms : DEFAULT_WAIT_MS,
-          onChange: (nextMs: number) => patchNodeData(id, { ms: nextMs }),
-        };
-      }
-      if (type === 'agent') {
-        return {
-          prompt: (data.prompt as string) ?? '',
-          provider: (data.provider as AgentProvider) ?? 'openai',
-          model: (data.model as string) ?? 'gpt-4o-mini',
-          apiKey: (data.apiKey as string) ?? '',
-          baseUrl: data.baseUrl as string | undefined,
-          maxSteps: data.maxSteps as number | undefined,
-          timeoutMs: data.timeoutMs as number | undefined,
-          restrictToGotoDomains: data.restrictToGotoDomains === true,
-          readOnly: data.readOnly !== false,
-          onChange: (patch: Record<string, unknown>) => patchNodeData(id, patch),
-        };
-      }
-      if (type === 'record') {
-        const profileId = resolveUpstreamProfile(id, nodesRef.current, edgesRef.current);
-        return {
-          steps: (data.steps as RecordedStep[]) ?? [],
-          profileId,
-          recording: Boolean(data.recording),
-          onStart: async () => {
-            if (!profileId) return;
-            await api.startRecording(profileId);
-            patchNodeData(id, { recording: true });
-          },
-          onStop: async () => {
-            if (!profileId) return;
-            try {
-              const { steps } = await api.stopRecording(profileId);
-              patchNodeData(id, { steps, recording: false });
-            } catch {
-              patchNodeData(id, { recording: false });
-            }
-          },
-          onClear: () => patchNodeData(id, { steps: [] }),
-          onGenerateGoto: () => {
-            const node = nodesRef.current.find((n) => n.id === id);
-            const steps = (node?.data as { steps?: RecordedStep[] }).steps ?? [];
-            generateGotoChain(id, steps);
-          },
-        };
-      }
-      return {};
-    },
-    [profiles, patchNodeData, generateGotoChain],
-  );
+  generateGotoChainRef.current = generateGotoChain;
 
   useEffect(() => {
     const seeded: Node[] = board.graph.nodes.map((n) => ({
       id: n.id,
       type: n.type,
       position: n.position,
-      data: injectData(n.type, n.data as Record<string, unknown>, n.id),
+      data: injectNode(n.type, n.data as Record<string, unknown>, n.id),
     }));
     setNodes(seeded);
     setEdges(board.graph.edges.map((e) => ({ id: e.id, source: e.source, target: e.target })));
@@ -298,7 +213,20 @@ export function FlowCanvas({ board, profiles }: { board: Board; profiles: Profil
           const status = await api.getRecording(profileId);
           patchNodeData(n.id, { steps: status.steps });
         } catch {
-          patchNodeData(n.id, { recording: false });
+          try {
+            const { steps } = await api.stopRecording(profileId);
+            patchNodeData(n.id, { steps, recording: false });
+            if (steps.length > 0) {
+              const nextNodes = nodesRef.current.map((node) =>
+                node.id === n.id ? { ...node, data: { ...node.data, steps, recording: false } } : node,
+              );
+              await persistBoardNow(nextNodes);
+            } else {
+              patchNodeData(n.id, { recording: false });
+            }
+          } catch {
+            patchNodeData(n.id, { recording: false });
+          }
         }
       }
     };
@@ -306,33 +234,20 @@ export function FlowCanvas({ board, profiles }: { board: Board; profiles: Profil
     const id = setInterval(poll, 1500);
     poll();
     return () => clearInterval(id);
-  }, [nodes, patchNodeData]);
+  }, [nodes, patchNodeData, persistBoardNow]);
 
   const onConnect = useCallback(
     (c: Connection) => setEdges((eds) => addEdge({ ...c, id: newId('e') }, eds)),
     [setEdges],
   );
 
-  const addNode = (type: 'profile' | 'goto' | 'wait' | 'agent' | 'screenshot' | 'record') => {
+  const addNode = (type: NodeType) => {
     const id = newId(type);
     const position = { x: 80 + Math.random() * 240, y: 80 + Math.random() * 240 };
-    const seed =
-      type === 'wait'
-        ? { ms: DEFAULT_WAIT_MS }
-        : type === 'agent'
-          ? {
-              prompt: '',
-              provider: 'openai',
-              model: 'gpt-4o-mini',
-              apiKey: '',
-              baseUrl: 'http://127.0.0.1:11434',
-              restrictToGotoDomains: false,
-              readOnly: true,
-            }
-          : type === 'record'
-            ? { steps: [], recording: false }
-            : {};
-    setNodes((ns) => [...ns, { id, type, position, data: injectData(type, seed, id) }]);
+    setNodes((ns) => [
+      ...ns,
+      { id, type, position, data: injectNode(type, defaultNodeData(type), id) },
+    ]);
   };
 
   useEffect(() => {
@@ -386,24 +301,11 @@ export function FlowCanvas({ board, profiles }: { board: Board; profiles: Profil
   return (
     <div className="flex h-full flex-col">
       <div className="flex shrink-0 items-center gap-2 border-b-2 border-foreground px-4 py-3">
-        <Button onClick={() => addNode('profile')} className="gap-1 text-xs">
-          + Profile
-        </Button>
-        <Button onClick={() => addNode('goto')} className="gap-1 text-xs">
-          + Goto
-        </Button>
-        <Button onClick={() => addNode('wait')} className="gap-1 text-xs">
-          + Wait
-        </Button>
-        <Button onClick={() => addNode('agent')} className="gap-1 text-xs">
-          + Agent
-        </Button>
-        <Button onClick={() => addNode('screenshot')} className="gap-1 text-xs">
-          + Screenshot
-        </Button>
-        <Button onClick={() => addNode('record')} className="gap-1 text-xs">
-          + Record
-        </Button>
+        {NODE_ORDER.map((type) => (
+          <Button key={type} onClick={() => addNode(type)} className="gap-1 text-xs">
+            + {NODE_DESCRIPTORS[type].label}
+          </Button>
+        ))}
         <div className="ml-auto flex items-center gap-3">
           <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
             {saving ? 'Saving…' : 'Saved'}

@@ -92,6 +92,8 @@ type PlaywrightContext = {
 };
 
 type PlaywrightPage = {
+  url(): string;
+  evaluate(script: string): Promise<unknown>;
   mainFrame(): { url(): string };
   on(event: 'framenavigated', listener: (frame: { url(): string; parentFrame(): unknown }) => void): void;
 };
@@ -116,23 +118,43 @@ export class InteractionRecorder {
     });
     await context.addInitScript({ content: RECORD_INIT_SCRIPT });
 
+    const seedNavigate = (url: string) => {
+      if (isInternalUrl(url)) return;
+      this.push({ type: 'navigate', url, at: new Date().toISOString() });
+    };
+
     const wirePage = (page: PlaywrightPage) => {
       page.on('framenavigated', (frame) => {
         if (frame.parentFrame() !== null) return;
-        const url = frame.url();
-        if (isInternalUrl(url)) return;
-        if (url === this.lastNavigateUrl) return;
-        this.lastNavigateUrl = url;
-        this.push({ type: 'navigate', url, at: new Date().toISOString() });
+        seedNavigate(frame.url());
       });
     };
 
-    for (const page of context.pages()) wirePage(page);
-    context.on('page', wirePage);
+    const activatePage = async (page: PlaywrightPage) => {
+      wirePage(page);
+      try {
+        await page.evaluate(RECORD_INIT_SCRIPT);
+      } catch {
+        /* page may still be loading */
+      }
+      try {
+        seedNavigate(page.url());
+      } catch {
+        /* ignore */
+      }
+    };
+
+    for (const page of context.pages()) await activatePage(page);
+    context.on('page', (page: PlaywrightPage) => {
+      void activatePage(page);
+    });
   }
 
   private push(step: RecordedStep): void {
-    if (step.type === 'navigate' && step.url === this.lastNavigateUrl) return;
+    if (step.type === 'navigate') {
+      if (step.url === this.lastNavigateUrl) return;
+      this.lastNavigateUrl = step.url;
+    }
     if (step.type === 'scroll' && this.steps.length > 0) {
       const prev = this.steps[this.steps.length - 1];
       if (prev.type === 'scroll' && prev.direction === step.direction) return;

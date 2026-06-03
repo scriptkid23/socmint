@@ -1,19 +1,12 @@
-import type {
-  AgentNodeData,
-  BoardGraph,
-  GotoNodeData,
-  ProfileNodeData,
-  WaitNodeData,
-} from '../../api/client';
+import type { BoardGraph, ProfileNodeData } from '../../api/client';
+import { validateNode, type GraphError } from './nodes/registry';
 
-export interface GraphError {
-  nodeId: string;
-  message: string;
-}
+export type { GraphError } from './nodes/registry';
 
 export function validateGraph(graph: BoardGraph): GraphError[] {
   const errors: GraphError[] = [];
 
+  // Topology: at most one outgoing connection per node.
   const outgoing = new Map<string, number>();
   for (const edge of graph.edges) {
     outgoing.set(edge.source, (outgoing.get(edge.source) ?? 0) + 1);
@@ -24,31 +17,18 @@ export function validateGraph(graph: BoardGraph): GraphError[] {
     }
   }
 
+  // Per-node field validation, delegated to each node's descriptor.
+  for (const node of graph.nodes) {
+    errors.push(...validateNode(node));
+  }
+
+  // Cross-node: a profile may only be used once.
   const profileIds = new Map<string, number>();
   for (const node of graph.nodes) {
     if (node.type === 'profile') {
       const pid = (node.data as ProfileNodeData).profileId;
-      if (pid === null) {
-        errors.push({ nodeId: node.id, message: 'No profile selected' });
-      } else {
+      if (pid !== null) {
         profileIds.set(pid, (profileIds.get(pid) ?? 0) + 1);
-      }
-    } else if (node.type === 'goto') {
-      const url = (node.data as GotoNodeData).url;
-      if (!url || url.trim() === '') {
-        errors.push({ nodeId: node.id, message: 'Goto URL is empty' });
-      }
-    } else if (node.type === 'wait') {
-      const ms = (node.data as WaitNodeData).ms;
-      if (!Number.isFinite(ms) || ms <= 0) {
-        errors.push({ nodeId: node.id, message: 'Wait duration must be greater than 0 ms' });
-      }
-    } else if (node.type === 'agent') {
-      const d = node.data as AgentNodeData;
-      if (!d.prompt?.trim()) errors.push({ nodeId: node.id, message: 'Agent prompt is empty' });
-      if (!d.model?.trim()) errors.push({ nodeId: node.id, message: 'Agent model is empty' });
-      if (d.provider !== 'ollama' && !d.apiKey?.trim()) {
-        errors.push({ nodeId: node.id, message: 'Agent API key is empty' });
       }
     }
   }

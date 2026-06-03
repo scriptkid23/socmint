@@ -1,29 +1,7 @@
 import { BoardGraphError } from './board.errors';
 import type { BoardGraph, BoardNode } from './board.types';
 import type { FlowStep } from '../runs/run.types';
-
-function normalizeHost(hostname: string): string {
-  return hostname.replace(/^www\./, '').toLowerCase();
-}
-
-function hostFromUrl(url: string): string | null {
-  try {
-    return normalizeHost(new URL(url).hostname);
-  } catch {
-    return null;
-  }
-}
-
-function deriveAllowDomains(steps: FlowStep[]): string[] {
-  const hosts = new Set<string>();
-  for (const step of steps) {
-    if (step.type === 'goto') {
-      const h = hostFromUrl(step.url);
-      if (h) hosts.add(h);
-    }
-  }
-  return [...hosts];
-}
+import { NODE_CHAIN_REGISTRY, type ChainContext, type ChainOutput } from './node-registry';
 
 export interface FlowJob {
   profileId: string;
@@ -78,67 +56,17 @@ export function resolveChains(graph: BoardGraph): FlowJob[] {
       visited.add(targetId);
       const target = byId.get(targetId);
       if (!target) throw new BoardGraphError(`Edge points to unknown node ${targetId}`);
-      if (target.type === 'profile') {
+
+      const descriptor = NODE_CHAIN_REGISTRY[target.type];
+      if (!descriptor.toSteps) {
+        // Root-only node (e.g. profile) wired into the middle of a chain.
         throw new BoardGraphError(`Profile node ${target.id} cannot appear inside a chain`);
       }
-      if (target.type === 'goto') {
-        if (!target.data.url || target.data.url.trim() === '') {
-          throw new BoardGraphError(`Goto node ${target.id} has an empty url`);
-        }
-        steps.push({
-          type: 'goto',
-          url: target.data.url,
-          waitUntil: target.data.waitUntil,
-          timeoutMs: target.data.timeoutMs,
-        });
-      } else if (target.type === 'wait') {
-        const ms = target.data.ms;
-        if (!Number.isFinite(ms) || ms <= 0) {
-          throw new BoardGraphError(`Wait node ${target.id} must have ms > 0`);
-        }
-        steps.push({ type: 'wait', ms });
-      } else if (target.type === 'agent') {
-        const d = target.data;
-        if (!d.prompt?.trim()) {
-          throw new BoardGraphError(`Agent node ${target.id} has empty prompt`);
-        }
-        if (!d.model?.trim()) {
-          throw new BoardGraphError(`Agent node ${target.id} has empty model`);
-        }
-        if (d.provider !== 'ollama' && !d.apiKey?.trim()) {
-          throw new BoardGraphError(`Agent node ${target.id} has empty apiKey`);
-        }
-        const domains =
-          d.allowDomains?.length && d.allowDomains.length > 0
-            ? d.allowDomains.map(normalizeHost)
-            : d.restrictToGotoDomains
-              ? deriveAllowDomains(steps)
-              : [];
-        steps.push({
-          type: 'agent',
-          prompt: d.prompt,
-          provider: d.provider,
-          model: d.model,
-          apiKey: d.apiKey ?? '',
-          baseUrl: d.baseUrl,
-          maxSteps: d.maxSteps ?? 25,
-          timeoutMs: d.timeoutMs ?? 300_000,
-          allowDomains: domains,
-          readOnly: d.readOnly ?? true,
-        });
-      } else if (target.type === 'screenshot') {
-        steps.push({ type: 'screenshot' });
-      } else if (target.type === 'record') {
-        endsWithRecord = true;
-        for (const s of target.data.steps ?? []) {
-          if (s.type === 'navigate' && s.url?.trim() && !s.url.startsWith('about:')) {
-            steps.push({ type: 'goto', url: s.url.trim() });
-            steps.push({ type: 'wait', ms: 800 });
-          }
-        }
-      } else {
-        throw new BoardGraphError(`Unknown node type in chain: ${(target as BoardNode).type}`);
-      }
+      const compile = descriptor.toSteps as (n: BoardNode, ctx: ChainContext) => ChainOutput;
+      const out = compile(target, { priorSteps: steps });
+      steps.push(...out.steps);
+      if (out.endsWithRecord) endsWithRecord = true;
+
       current = targetId;
     }
 

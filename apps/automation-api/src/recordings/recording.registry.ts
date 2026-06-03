@@ -19,6 +19,8 @@ interface ActiveRecording {
 
 export class RecordingRegistry implements OnModuleDestroy {
   private readonly active = new Map<string, ActiveRecording>();
+  /** Steps captured when the browser closed without an explicit Stop. */
+  private readonly orphanedSteps = new Map<string, RecordedStep[]>();
 
   constructor(
     private readonly profiles: ProfileService,
@@ -103,7 +105,14 @@ export class RecordingRegistry implements OnModuleDestroy {
 
   async stop(profileId: string): Promise<{ steps: RecordedStep[] }> {
     const entry = this.active.get(profileId);
-    if (!entry) return { steps: [] };
+    if (!entry) {
+      const cached = this.orphanedSteps.get(profileId);
+      if (cached) {
+        this.orphanedSteps.delete(profileId);
+        return { steps: cached };
+      }
+      return { steps: [] };
+    }
     const steps = entry.session.getSteps();
     await entry.session.close();
     return { steps };
@@ -112,6 +121,10 @@ export class RecordingRegistry implements OnModuleDestroy {
   private async cleanup(profileId: string): Promise<void> {
     const entry = this.active.get(profileId);
     if (!entry) return;
+    const steps = entry.session.getSteps();
+    if (steps.length > 0) {
+      this.orphanedSteps.set(profileId, steps);
+    }
     this.active.delete(profileId);
     const at = new Date().toISOString();
     await this.lock.release(this.dir(profileId));

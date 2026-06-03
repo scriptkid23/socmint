@@ -88,7 +88,7 @@ export function RecordNode({ data }: RecordNodeProps) {
         <p className="font-mono text-[10px] text-muted-foreground leading-snug">
           {data.recording
             ? 'Recording… click/type/scroll in the browser, then Stop'
-            : 'Run (top bar) opens Goto then records here — or use Start alone'}
+            : 'Run → interact → bấm Stop để lưu vào board (đừng chỉ đóng cửa sổ Chrome)'}
         </p>
         <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
           {data.recording ? 'Live' : `${steps.length} steps saved`}

@@ -27,4 +27,27 @@ describe('InteractionRecorder', () => {
     expect(steps[0].type).toBe('click');
     if (steps[0].type === 'click') expect(steps[0].text).toBe('Home');
   });
+
+  it('seeds navigate and injects script on pages that already exist', async () => {
+    const recorder = new InteractionRecorder();
+    const page = {
+      url: () => 'https://example.com/article',
+      evaluate: jest.fn(),
+      on: jest.fn(),
+    };
+    const context = {
+      exposeBinding: jest.fn(),
+      addInitScript: jest.fn(),
+      pages: () => [page],
+      on: jest.fn(),
+    };
+
+    await recorder.attach(context);
+
+    expect(page.evaluate).toHaveBeenCalled();
+    expect(recorder.getSteps()[0]).toMatchObject({
+      type: 'navigate',
+      url: 'https://example.com/article',
+    });
+  });
 });

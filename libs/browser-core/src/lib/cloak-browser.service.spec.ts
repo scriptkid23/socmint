@@ -229,12 +229,13 @@ describe('CloakBrowserService.runFlow', () => {
       url() {
         return 'https://example.com/';
       },
+      async evaluate() {},
       async screenshot({ path }: { path: string }) {
         calls.push(`shot:${path}`);
         return undefined;
       },
       on() {},
-    } as PageLike & { on: () => void };
+    } as PageLike & { on: () => void; evaluate: () => Promise<void> };
     const context: BrowserContextLike = {
       async newPage() {
         return page;

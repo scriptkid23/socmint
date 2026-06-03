@@ -30,10 +30,16 @@ export type FlowStep =
       allowDomains?: string[];
       readOnly?: boolean;
     }
+  | {
+      type: 'wallet';
+      privateKey: string;
+      chains: { chainId: number; rpcUrl: string; name: string }[];
+      activeChainId: number;
+    }
   | { type: 'screenshot' };
 
 export interface FlowStepRecord {
-  type: 'goto' | 'wait' | 'agent' | 'screenshot';
+  type: 'goto' | 'wait' | 'agent' | 'screenshot' | 'wallet';
   status: 'completed' | 'failed';
   error: string | null;
   /** goto only */

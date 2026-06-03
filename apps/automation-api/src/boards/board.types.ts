@@ -53,6 +53,17 @@ export interface RecordNodeData {
   steps: RecordedStep[];
 }
 
+export interface ChainConfig {
+  chainId: number;
+  rpcUrl: string;
+  name: string;
+}
+export interface MetaMaskNodeData {
+  privateKey: string;
+  chains: ChainConfig[];
+  activeChainId: number;
+}
+
 interface NodeBase {
   id: string;
   position: { x: number; y: number };
@@ -64,7 +75,8 @@ export type BoardNode =
   | (NodeBase & { type: 'wait'; data: WaitNodeData })
   | (NodeBase & { type: 'agent'; data: AgentNodeData })
   | (NodeBase & { type: 'screenshot'; data: ScreenshotNodeData })
-  | (NodeBase & { type: 'record'; data: RecordNodeData });
+  | (NodeBase & { type: 'record'; data: RecordNodeData })
+  | (NodeBase & { type: 'metamask'; data: MetaMaskNodeData });
 
 export interface BoardEdge {
   id: string;

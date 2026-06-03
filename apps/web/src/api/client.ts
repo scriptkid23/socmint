@@ -58,17 +58,29 @@ export interface RecordNodeData {
   steps: RecordedStep[];
 }
 
+export interface ChainConfig {
+  chainId: number;
+  rpcUrl: string;
+  name: string;
+}
+export interface MetaMaskNodeData {
+  privateKey: string;
+  chains: ChainConfig[];
+  activeChainId: number;
+}
+
 export type BoardNodeData =
   | ProfileNodeData
   | GotoNodeData
   | WaitNodeData
   | AgentNodeData
   | RecordNodeData
+  | MetaMaskNodeData
   | Record<string, never>;
 
 export interface BoardNode {
   id: string;
-  type: 'profile' | 'goto' | 'wait' | 'agent' | 'screenshot' | 'record';
+  type: 'profile' | 'goto' | 'wait' | 'agent' | 'screenshot' | 'record' | 'metamask';
   position: { x: number; y: number };
   data: BoardNodeData;
 }

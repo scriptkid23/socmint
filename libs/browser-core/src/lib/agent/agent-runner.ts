@@ -7,6 +7,7 @@ import type {
   AgentResult,
   AgentStopReason,
   AgentTask,
+  DomElement,
   LlmClient,
   LlmMessage,
   PageActions,
@@ -71,20 +72,60 @@ export async function executeAction(
   }
 }
 
+export function formatStepHistory(transcript: AgentResult['transcript']): string {
+  if (transcript.length === 0) return '';
+  const lines = transcript.slice(-5).map((s) => {
+    const action = JSON.stringify(s.action);
+    const note = s.blocked ? ' (blocked)' : '';
+    return `- Step ${s.step}: ${action}${note}`;
+  });
+  return `\n\nRecent steps (do not repeat the same action):\n${lines.join('\n')}`;
+}
+
+/** True when the same click index was already tried and the page URL did not change. */
+export function isClickStuck(
+  action: AgentAction,
+  stuckClick: { index: number; url: string } | null,
+  currentUrl: string,
+): boolean {
+  return (
+    action.type === 'click' &&
+    action.index !== undefined &&
+    stuckClick !== null &&
+    stuckClick.index === action.index &&
+    stuckClick.url === currentUrl
+  );
+}
+
+/** True when the field already contains the text the agent wants to type. */
+export function isTypeRedundant(dom: DomElement[], action: AgentAction): boolean {
+  if (action.type !== 'type' || action.index === undefined || action.text === undefined) {
+    return false;
+  }
+  const el = dom[action.index];
+  if (!el) return false;
+  const current = (el.value ?? '').trim();
+  const target = action.text.trim();
+  if (!target) return false;
+  return current === target || current.includes(target);
+}
+
 export function buildMessages(
   prompt: string,
   url: string,
   observation: string,
   limits: AgentLimits,
+  transcript: AgentResult['transcript'] = [],
 ): LlmMessage[] {
   const guard = limits.readOnly
     ? `Read-only mode: only browse and extract. Allowed domains: ${limits.allowDomains.join(', ') || '(none specified)'}.`
     : `Allowed domains: ${limits.allowDomains.join(', ') || '(any)'}.`;
+  const history = formatStepHistory(transcript);
   return [
     { role: 'system', content: AGENT_SYSTEM_PROMPT },
     {
       role: 'user',
-      content: `Task: ${prompt}\n\nCurrent URL: ${url}\n\n${guard}\n\nDOM elements:\n${observation}\n\nRespond with the next single action as JSON.`,
+      content: `Task: ${prompt}\n\nCurrent URL: ${url}\n\n${guard}\n\nDOM elements:\n${observation}${history}\n\nRespond with the next single action as JSON.`,
     },
   ];
 }
@@ -143,6 +184,8 @@ export async function runAgent(
   let collected: unknown = null;
   let lastActionKey: string | null = null;
   let repeatCount = 0;
+  /** Set when a click did not change the page URL (model should pick another index or scroll). */
+  let stuckClick: { index: number; url: string } | null = null;
 
   while (stepsUsed < limits.maxSteps) {
     if (page.isClosed?.()) {
@@ -155,7 +198,7 @@ export async function runAgent(
 
     const dom = await page.readDom();
     const observation = formatDomForPrompt(dom);
-    const messages = buildMessages(task.prompt, page.url(), observation, limits);
+    const messages = buildMessages(task.prompt, page.url(), observation, limits, transcript);
 
     let decision: AgentDecision;
     try {
@@ -180,6 +223,41 @@ export async function runAgent(
     }
     lastActionKey = actionKey;
     if (repeatCount >= 2) {
+      if (decision.action.type === 'type') {
+        try {
+          await page.pressEnter();
+          transcript.push({
+            step: stepsUsed,
+            thought: decision.thought,
+            action: { type: 'pressEnter' },
+            observation:
+              'Auto-submitted with Enter after the model repeated the same type action; continue from the new page.',
+          });
+          repeatCount = 0;
+          lastActionKey = null;
+          continue;
+        } catch (e) {
+          return finish('error', stepsUsed, collected, transcript, e);
+        }
+      }
+      if (decision.action.type === 'click') {
+        try {
+          await page.scroll('down');
+          transcript.push({
+            step: stepsUsed,
+            thought: decision.thought,
+            action: { type: 'scroll', direction: 'down' },
+            observation:
+              'Auto-scrolled down after the model repeated the same click; pick a different [index] or scroll again.',
+          });
+          stuckClick = null;
+          repeatCount = 0;
+          lastActionKey = null;
+          continue;
+        } catch (e) {
+          return finish('error', stepsUsed, collected, transcript, e);
+        }
+      }
       return finish(
         'error',
         stepsUsed,
@@ -204,8 +282,45 @@ export async function runAgent(
       continue;
     }
 
+    if (isTypeRedundant(dom, decision.action)) {
+      transcript.push({
+        step: stepsUsed,
+        thought: decision.thought,
+        action: decision.action,
+        observation:
+          'Skipped type: input already contains the target text. Use pressEnter to submit or choose another action.',
+      });
+      continue;
+    }
+
+    const currentUrl = page.url();
+    if (isClickStuck(decision.action, stuckClick, currentUrl)) {
+      transcript.push({
+        step: stepsUsed,
+        thought: decision.thought,
+        action: decision.action,
+        observation:
+          `Skipped click on [${decision.action.index}]: page URL did not change. Try another index, scroll down, or use extract/finish with visible results.`,
+      });
+      continue;
+    }
+
     try {
+      const urlBeforeAction =
+        decision.action.type === 'click' ? currentUrl : null;
       await executeAction(page, decision.action, limits);
+      if (
+        decision.action.type === 'click' &&
+        decision.action.index !== undefined &&
+        urlBeforeAction !== null
+      ) {
+        const urlAfter = page.url();
+        if (urlAfter === urlBeforeAction) {
+          stuckClick = { index: decision.action.index, url: urlBeforeAction };
+        } else {
+          stuckClick = null;
+        }
+      }
       if (decision.action.type === 'extract') {
         collected = decision.action.data ?? collected;
       }

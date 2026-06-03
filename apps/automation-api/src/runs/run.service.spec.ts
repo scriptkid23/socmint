@@ -170,10 +170,10 @@ describe('RunService.executeFlow', () => {
   it('runs a multi-step chain, writes result.json, maps screenshot to a relative path', async () => {
     const profile = await profiles.create({ label: 'p1' });
     const browser = {
-      runFlow: jest.fn().mockResolvedValue([
+      runFlow: jest.fn().mockResolvedValue({ results: [
         { type: 'goto', status: 'completed', error: null, title: 'T', finalUrl: 'https://e/' },
         { type: 'screenshot', status: 'completed', error: null, screenshotPath: '/ignored.png' },
-      ]),
+      ] }),
     };
     const svc = service(browser);
 
@@ -193,9 +193,9 @@ describe('RunService.executeFlow', () => {
   it('marks the record failed when a step fails', async () => {
     const profile = await profiles.create({ label: 'p2' });
     const browser = {
-      runFlow: jest.fn().mockResolvedValue([
+      runFlow: jest.fn().mockResolvedValue({ results: [
         { type: 'goto', status: 'failed', error: 'nav boom', title: undefined, finalUrl: undefined },
-      ]),
+      ] }),
     };
     const svc = service(browser);
 
@@ -208,7 +208,7 @@ describe('RunService.executeFlow', () => {
   it('maps agent step results without apiKey in saved record', async () => {
     const profile = await profiles.create({ label: 'p-agent' });
     const browser = {
-      runFlow: jest.fn().mockResolvedValue([
+      runFlow: jest.fn().mockResolvedValue({ results: [
         {
           type: 'agent',
           status: 'completed',
@@ -218,7 +218,7 @@ describe('RunService.executeFlow', () => {
           result: { items: [] },
           transcriptPath: '/tmp/transcript.json',
         },
-      ]),
+      ] }),
     };
     const svc = service(browser);
     const rec = await svc.executeFlow(profile.id, [

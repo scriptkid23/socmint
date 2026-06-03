@@ -217,8 +217,8 @@ describe('CloakBrowserService.runFlow', () => {
   function makeFakes(opts?: { failOnGoto?: boolean }) {
     const calls: string[] = [];
     let closed = false;
-    const page: PageLike = {
-      async goto(url) {
+    const page = {
+      async goto(url: string) {
         calls.push(`goto:${url}`);
         if (opts?.failOnGoto) throw new Error('nav boom');
         return undefined;
@@ -229,11 +229,12 @@ describe('CloakBrowserService.runFlow', () => {
       url() {
         return 'https://example.com/';
       },
-      async screenshot({ path }) {
+      async screenshot({ path }: { path: string }) {
         calls.push(`shot:${path}`);
         return undefined;
       },
-    };
+      on() {},
+    } as PageLike & { on: () => void };
     const context: BrowserContextLike = {
       async newPage() {
         return page;
@@ -245,7 +246,9 @@ describe('CloakBrowserService.runFlow', () => {
       async close() {
         closed = true;
       },
-    };
+      exposeBinding: async () => {},
+      addInitScript: async () => {},
+    } as BrowserContextLike;
     const launcher: BrowserLauncher = {
       async ensureBinary() {},
       async launchPersistentContext() {
@@ -265,7 +268,7 @@ describe('CloakBrowserService.runFlow', () => {
       { type: 'screenshot', screenshotPath: '/abs/step-1.png' },
     ];
 
-    const results: FlowStepResult[] = await svc.runFlow(launch, steps);
+    const { results } = await svc.runFlow(launch, steps);
 
     expect(calls).toEqual(['goto:https://example.com', 'shot:/abs/step-1.png']);
     expect(results[0]).toMatchObject({ type: 'goto', status: 'completed', title: 'Example Domain', finalUrl: 'https://example.com/' });
@@ -284,7 +287,7 @@ describe('CloakBrowserService.runFlow', () => {
       ]);
 
       await jest.advanceTimersByTimeAsync(2000);
-      const results = await run;
+      const { results } = await run;
 
       expect(calls).toEqual(['goto:https://example.com']);
       expect(results[1]).toMatchObject({ type: 'wait', status: 'completed', error: null });
@@ -329,7 +332,7 @@ describe('CloakBrowserService.runFlow', () => {
       },
     };
     const svc = new CloakBrowserService(launcher);
-    const results = await svc.runFlow(
+    const { results } = await svc.runFlow(
       launch,
       [
         {
@@ -379,11 +382,29 @@ describe('CloakBrowserService.runFlow', () => {
       { type: 'screenshot', screenshotPath: '/abs/step-1.png' },
     ];
 
-    const results = await svc.runFlow(launch, steps);
+    const { results } = await svc.runFlow(launch, steps);
 
     expect(results).toHaveLength(1);
     expect(results[0]).toMatchObject({ type: 'goto', status: 'failed', error: 'nav boom' });
     expect(calls).toEqual(['goto:https://example.com']);
+    expect(isClosed()).toBe(true);
+  });
+
+  it('keeps browser open for recording when requested', async () => {
+    const { launcher, calls, isClosed } = makeFakes();
+    const svc = new CloakBrowserService(launcher);
+    const { results, recordingSession } = await svc.runFlow(
+      launch,
+      [{ type: 'goto', url: 'https://example.com' }],
+      undefined,
+      { keepOpenForRecording: true },
+    );
+
+    expect(results[0]).toMatchObject({ type: 'goto', status: 'completed' });
+    expect(recordingSession).toBeDefined();
+    expect(isClosed()).toBe(false);
+    expect(calls).toEqual(['goto:https://example.com']);
+    await recordingSession?.close();
     expect(isClosed()).toBe(true);
   });
 });

@@ -12,7 +12,7 @@ export interface GotoNodeData {
 export interface WaitNodeData {
   ms: number;
 }
-export type AgentProvider = 'openai' | 'anthropic' | 'gemini' | 'ollama';
+export type AgentProvider = 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'openrouter';
 export interface AgentNodeData {
   prompt: string;
   provider: AgentProvider;
@@ -23,9 +23,35 @@ export interface AgentNodeData {
   maxSteps?: number;
   timeoutMs?: number;
   allowDomains?: string[];
+  /** When true, agent may only navigate to hosts from prior Goto nodes (blocks opening external result links via navigate). */
+  restrictToGotoDomains?: boolean;
   readOnly?: boolean;
 }
 export type ScreenshotNodeData = Record<string, never>;
+
+export type RecordedStep =
+  | { type: 'navigate'; url: string; title?: string; at: string }
+  | {
+      type: 'click';
+      tag: string;
+      text: string;
+      href: string | null;
+      selector: string;
+      at: string;
+    }
+  | {
+      type: 'type';
+      tag: string;
+      text: string;
+      selector: string;
+      value: string;
+      at: string;
+    }
+  | { type: 'scroll'; direction: 'up' | 'down'; at: string };
+
+export interface RecordNodeData {
+  steps: RecordedStep[];
+}
 
 interface NodeBase {
   id: string;
@@ -37,7 +63,8 @@ export type BoardNode =
   | (NodeBase & { type: 'goto'; data: GotoNodeData })
   | (NodeBase & { type: 'wait'; data: WaitNodeData })
   | (NodeBase & { type: 'agent'; data: AgentNodeData })
-  | (NodeBase & { type: 'screenshot'; data: ScreenshotNodeData });
+  | (NodeBase & { type: 'screenshot'; data: ScreenshotNodeData })
+  | (NodeBase & { type: 'record'; data: RecordNodeData });
 
 export interface BoardEdge {
   id: string;

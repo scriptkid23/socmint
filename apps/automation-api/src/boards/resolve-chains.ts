@@ -28,6 +28,8 @@ function deriveAllowDomains(steps: FlowStep[]): string[] {
 export interface FlowJob {
   profileId: string;
   steps: FlowStep[];
+  /** Chain ends on a Record node — keep browser open for manual capture after steps. */
+  endsWithRecord?: boolean;
 }
 
 export function resolveChains(graph: BoardGraph): FlowJob[] {
@@ -64,6 +66,7 @@ export function resolveChains(graph: BoardGraph): FlowJob[] {
     }
 
     const steps: FlowStep[] = [];
+    let endsWithRecord = false;
     const visited = new Set<string>([node.id]);
     let current = node.id;
     for (;;) {
@@ -108,7 +111,9 @@ export function resolveChains(graph: BoardGraph): FlowJob[] {
         const domains =
           d.allowDomains?.length && d.allowDomains.length > 0
             ? d.allowDomains.map(normalizeHost)
-            : deriveAllowDomains(steps);
+            : d.restrictToGotoDomains
+              ? deriveAllowDomains(steps)
+              : [];
         steps.push({
           type: 'agent',
           prompt: d.prompt,
@@ -123,14 +128,22 @@ export function resolveChains(graph: BoardGraph): FlowJob[] {
         });
       } else if (target.type === 'screenshot') {
         steps.push({ type: 'screenshot' });
+      } else if (target.type === 'record') {
+        endsWithRecord = true;
+        for (const s of target.data.steps ?? []) {
+          if (s.type === 'navigate' && s.url?.trim() && !s.url.startsWith('about:')) {
+            steps.push({ type: 'goto', url: s.url.trim() });
+            steps.push({ type: 'wait', ms: 800 });
+          }
+        }
       } else {
         throw new BoardGraphError(`Unknown node type in chain: ${(target as BoardNode).type}`);
       }
       current = targetId;
     }
 
-    if (steps.length > 0) {
-      jobs.push({ profileId: node.data.profileId, steps });
+    if (steps.length > 0 || endsWithRecord) {
+      jobs.push({ profileId: node.data.profileId, steps, endsWithRecord: endsWithRecord || undefined });
     }
   }
 

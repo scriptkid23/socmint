@@ -10,12 +10,13 @@ export interface AgentNodeProps extends NodeProps {
     baseUrl?: string;
     maxSteps?: number;
     timeoutMs?: number;
+    restrictToGotoDomains?: boolean;
     readOnly?: boolean;
     onChange?: (patch: Record<string, unknown>) => void;
   };
 }
 
-const PROVIDERS: AgentProvider[] = ['openai', 'anthropic', 'gemini', 'ollama'];
+const PROVIDERS: AgentProvider[] = ['openai', 'anthropic', 'gemini', 'ollama', 'openrouter'];
 
 const DEFAULT_OLLAMA_BASE_URL = 'http://127.0.0.1:11434';
 
@@ -24,6 +25,7 @@ const MODEL_PLACEHOLDER: Record<AgentProvider, string> = {
   anthropic: 'claude-3-5-haiku-20241022',
   gemini: 'gemini-2.0-flash',
   ollama: 'gemma3:4b',
+  openrouter: 'openai/gpt-4o-mini',
 };
 
 export function AgentNode({ data }: AgentNodeProps) {
@@ -82,6 +84,14 @@ export function AgentNode({ data }: AgentNodeProps) {
           value={data.apiKey}
           onChange={(e) => patch({ apiKey: e.target.value })}
         />
+        <label className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest">
+          <input
+            type="checkbox"
+            checked={data.restrictToGotoDomains === true}
+            onChange={(e) => patch({ restrictToGotoDomains: e.target.checked })}
+          />
+          Restrict to Goto domain
+        </label>
         <label className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest">
           <input
             type="checkbox"

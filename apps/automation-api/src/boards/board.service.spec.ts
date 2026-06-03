@@ -22,7 +22,8 @@ describe('BoardService', () => {
   });
 
   function service(runs?: Partial<RunService>) {
-    return new BoardService(store, runs as unknown as RunService);
+    const recordings = { registerFromFlow: jest.fn() };
+    return new BoardService(store, runs as unknown as RunService, recordings as never);
   }
 
   it('creates an empty board with a name', async () => {
@@ -69,7 +70,11 @@ describe('BoardService', () => {
     const result = await svc.run(board.id);
 
     expect(executeFlow).toHaveBeenCalledTimes(1);
-    expect(executeFlow).toHaveBeenCalledWith('prof-1', [{ type: 'goto', url: 'https://e', waitUntil: undefined, timeoutMs: undefined }]);
+    expect(executeFlow).toHaveBeenCalledWith(
+      'prof-1',
+      [{ type: 'goto', url: 'https://e', waitUntil: undefined, timeoutMs: undefined }],
+      expect.objectContaining({ recordings: expect.anything() }),
+    );
     expect(result.boardId).toBe(board.id);
     expect(result.runs).toHaveLength(1);
   });

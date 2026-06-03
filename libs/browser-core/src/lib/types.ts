@@ -1,4 +1,5 @@
 import type { AgentLimits, AgentStopReason, AgentTask } from './agent/types';
+import type { RecordedStep } from './recorded-step.types';
 
 export type { AgentLimits, AgentStopReason, AgentTask } from './agent/types';
 
@@ -59,12 +60,29 @@ export interface InteractiveSession {
   close(): Promise<void>;
 }
 
+/** Interactive window that captures user actions into steps. */
+export interface RecordingSession extends InteractiveSession {
+  /** Snapshot of recorded steps so far. */
+  getSteps(): RecordedStep[];
+}
+
 /** A single executable step with all paths already resolved by the caller. */
 export type ResolvedFlowStep =
   | { type: 'goto'; url: string; waitUntil?: WaitUntil; timeoutMs?: number }
   | { type: 'wait'; ms: number }
   | { type: 'agent'; task: AgentTask; limits: AgentLimits; transcriptPath?: string }
   | { type: 'screenshot'; screenshotPath: string };
+
+export interface RunFlowOptions {
+  /** When true, keep the browser open and attach a recorder after steps finish. */
+  keepOpenForRecording?: boolean;
+}
+
+export interface RunFlowResult {
+  results: FlowStepResult[];
+  /** Present when keepOpenForRecording was set and steps completed without fatal close. */
+  recordingSession?: RecordingSession;
+}
 
 /** Per-step outcome returned by runFlow, in execution order. */
 export interface AgentFlowStepResult {

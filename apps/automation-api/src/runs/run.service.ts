@@ -10,7 +10,13 @@ import type { LaunchOptions, RunPageOptions, ResolvedFlowStep } from '@socmint/b
 import { LockService } from '../profiles/lock.service';
 import { ProfileService } from '../profiles/profile.service';
 import { AuditLogger } from './audit.logger';
+import type { RecordingRegistry } from '../recordings/recording.registry';
 import type { RunRecord, FlowStep, FlowStepRecord, FlowRunRecord } from './run.types';
+
+export interface ExecuteFlowOptions {
+  endsWithRecord?: boolean;
+  recordings?: RecordingRegistry;
+}
 
 export interface RunRequest {
   url: string;
@@ -103,9 +109,14 @@ export class RunService {
     return record;
   }
 
-  async executeFlow(profileId: string, steps: FlowStep[]): Promise<FlowRunRecord> {
+  async executeFlow(
+    profileId: string,
+    steps: FlowStep[],
+    options?: ExecuteFlowOptions,
+  ): Promise<FlowRunRecord> {
     const profile = await this.profiles.get(profileId);
     const profileDir = resolveProfileDir(this.dataRoot, profileId);
+    const endsWithRecord = options?.endsWithRecord === true;
 
     await this.lock.acquire(profileDir, process.pid);
 
@@ -116,7 +127,7 @@ export class RunService {
 
     const launch: LaunchOptions = {
       userDataDir: resolveUserDataDir(this.dataRoot, profileId),
-      headless: profile.launchDefaults.headless,
+      headless: endsWithRecord ? false : profile.launchDefaults.headless,
       geoip: profile.launchDefaults.geoip,
       proxy: profile.proxy,
     };
@@ -151,8 +162,19 @@ export class RunService {
     });
 
     let record: FlowRunRecord;
+    let keepRecording = false;
     try {
-      const stepResults = await this.browser.runFlow(launch, resolved);
+      if (endsWithRecord) {
+        await this.profiles.setStatus(profileId, 'authenticating');
+      }
+      const flow = await this.browser.runFlow(launch, resolved, undefined, {
+        keepOpenForRecording: endsWithRecord,
+      });
+      const stepResults = flow.results;
+      if (endsWithRecord && flow.recordingSession && options?.recordings) {
+        await options.recordings.registerFromFlow(profileId, flow.recordingSession);
+        keepRecording = true;
+      }
       const stepRecords: FlowStepRecord[] = stepResults.map((r, i) => {
         if (r.type === 'agent') {
           return {
@@ -200,7 +222,12 @@ export class RunService {
         steps: [],
       };
     } finally {
-      await this.lock.release(profileDir);
+      if (!keepRecording) {
+        await this.lock.release(profileDir);
+        if (endsWithRecord) {
+          await this.profiles.setStatus(profileId, 'idle').catch(() => undefined);
+        }
+      }
     }
 
     await writeFile(resolve(runDir, 'result.json'), JSON.stringify(record, null, 2), 'utf8');

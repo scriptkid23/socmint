@@ -11,7 +11,7 @@ export interface RunAuditEntry {
 export interface SessionAuditEntry {
   profileId: string;
   sessionId: string;
-  event: 'opened' | 'closed';
+  event: 'opened' | 'closed' | 'recording_started' | 'recording_stopped';
   at: string;
 }
 

@@ -1,4 +1,4 @@
-export type AgentProvider = 'openai' | 'anthropic' | 'gemini' | 'ollama';
+export type AgentProvider = 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'openrouter';
 
 export const DEFAULT_OLLAMA_BASE_URL = 'http://127.0.0.1:11434';
 

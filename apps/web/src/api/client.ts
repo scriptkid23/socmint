@@ -21,7 +21,7 @@ export interface GotoNodeData {
 export interface WaitNodeData {
   ms: number;
 }
-export type AgentProvider = 'openai' | 'anthropic' | 'gemini' | 'ollama';
+export type AgentProvider = 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'openrouter';
 export interface AgentNodeData {
   prompt: string;
   provider: AgentProvider;
@@ -31,18 +31,44 @@ export interface AgentNodeData {
   maxSteps?: number;
   timeoutMs?: number;
   allowDomains?: string[];
+  restrictToGotoDomains?: boolean;
   readOnly?: boolean;
 }
+export type RecordedStep =
+  | { type: 'navigate'; url: string; title?: string; at: string }
+  | {
+      type: 'click';
+      tag: string;
+      text: string;
+      href: string | null;
+      selector: string;
+      at: string;
+    }
+  | {
+      type: 'type';
+      tag: string;
+      text: string;
+      selector: string;
+      value: string;
+      at: string;
+    }
+  | { type: 'scroll'; direction: 'up' | 'down'; at: string };
+
+export interface RecordNodeData {
+  steps: RecordedStep[];
+}
+
 export type BoardNodeData =
   | ProfileNodeData
   | GotoNodeData
   | WaitNodeData
   | AgentNodeData
+  | RecordNodeData
   | Record<string, never>;
 
 export interface BoardNode {
   id: string;
-  type: 'profile' | 'goto' | 'wait' | 'agent' | 'screenshot';
+  type: 'profile' | 'goto' | 'wait' | 'agent' | 'screenshot' | 'record';
   position: { x: number; y: number };
   data: BoardNodeData;
 }
@@ -124,6 +150,18 @@ export const api = {
     }),
   closeLoginSession: (id: string) =>
     req<void>(`/profiles/${id}/login-session`, { method: 'DELETE' }),
+  startRecording: (profileId: string) =>
+    req<{ sessionId: string; status: 'recording' }>(`/profiles/${profileId}/recording-session`, {
+      method: 'POST',
+    }),
+  getRecording: (profileId: string) =>
+    req<{ sessionId: string; status: 'recording'; steps: RecordedStep[] }>(
+      `/profiles/${profileId}/recording-session`,
+    ),
+  stopRecording: (profileId: string) =>
+    req<{ steps: RecordedStep[] }>(`/profiles/${profileId}/recording-session`, {
+      method: 'DELETE',
+    }),
   listBoards: () => req<Board[]>('/boards'),
   getBoard: (id: string) => req<Board>(`/boards/${id}`),
   createBoard: (body: { name: string }) =>

@@ -1,3 +1,4 @@
+import { COLLECT_VISIBLE_ELEMENTS } from './dom-collect';
 import type { AgentDecision, DomElement } from './types';
 
 export function formatDomForPrompt(elements: DomElement[]): string {
@@ -7,7 +8,7 @@ export function formatDomForPrompt(elements: DomElement[]): string {
       const href = el.href ? ` href="${el.href}"` : '';
       const role = el.role ? ` role="${el.role}"` : '';
       const value =
-        el.value !== undefined && el.value !== null
+        el.value !== undefined && el.value !== null && String(el.value).length > 0
           ? ` value="${String(el.value).slice(0, 120)}"`
           : '';
       return `[${el.index}] <${el.tag}${role}${href}${value}> "${el.text.slice(0, 120)}"`;
@@ -17,29 +18,26 @@ export function formatDomForPrompt(elements: DomElement[]): string {
 
 /** Script executed inside the browser via page.evaluate. */
 export const EXTRACT_DOM_SCRIPT = `(() => {
-  const MAX = 80;
-  const seen = new Set();
+${COLLECT_VISIBLE_ELEMENTS}
+  const searchRoles = ['searchbox', 'combobox', 'textbox'];
+  const nodes = collectVisibleElements();
   const out = [];
-  const nodes = document.querySelectorAll(
-    'a, button, input, textarea, select, [role="button"], [role="link"]'
-  );
   for (const el of nodes) {
-    if (out.length >= MAX) break;
-    const rect = el.getBoundingClientRect();
-    if (rect.width < 2 || rect.height < 2) continue;
-    const text = (el.innerText || el.getAttribute('aria-label') || '').trim();
-    if (!text && el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA') continue;
-    const key = el.tagName + text;
-    if (seen.has(key)) continue;
-    seen.add(key);
+    const text = (el.innerText || el.getAttribute('aria-label') || el.getAttribute('placeholder') || '').trim();
     const isField = el.tagName === 'INPUT' || el.tagName === 'TEXTAREA';
+    const isEditable = el.isContentEditable;
+    const role = el.getAttribute('role');
+    const isSearchRole = role && searchRoles.indexOf(role) >= 0;
+    let value = null;
+    if (isField) value = el.value || '';
+    else if (isEditable || isSearchRole) value = (el.innerText || el.textContent || '').trim();
     out.push({
       index: out.length,
       tag: el.tagName.toLowerCase(),
-      role: el.getAttribute('role'),
+      role: role,
       text: text.slice(0, 200),
       href: el.tagName === 'A' ? el.href : null,
-      value: isField ? (el.value || '') : null,
+      value: value,
     });
   }
   return out;

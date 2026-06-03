@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { RecordingRegistry } from '../recordings/recording.registry';
 import type { RunService } from '../runs/run.service';
 import type { FlowRunRecord } from '../runs/run.types';
 import { BoardStore } from './board.store';
@@ -20,6 +21,7 @@ export class BoardService {
   constructor(
     private readonly store: BoardStore,
     private readonly runs: RunService,
+    private readonly recordings: RecordingRegistry,
   ) {}
 
   async create(input: CreateBoardInput): Promise<BoardRecord> {
@@ -67,7 +69,12 @@ export class BoardService {
     const jobs = resolveChains(board.graph); // throws BoardGraphError on invalid graph
     const startedAt = new Date().toISOString();
     const runs: FlowRunRecord[] = await Promise.all(
-      jobs.map((job) => this.runs.executeFlow(job.profileId, job.steps)),
+      jobs.map((job) =>
+        this.runs.executeFlow(job.profileId, job.steps, {
+          endsWithRecord: job.endsWithRecord,
+          recordings: this.recordings,
+        }),
+      ),
     );
     return {
       id: randomUUID(),

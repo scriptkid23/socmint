@@ -21,7 +21,7 @@ export type FlowStep =
   | {
       type: 'agent';
       prompt: string;
-      provider: 'openai' | 'anthropic' | 'gemini' | 'ollama';
+      provider: 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'openrouter';
       model: string;
       apiKey: string;
       baseUrl?: string;

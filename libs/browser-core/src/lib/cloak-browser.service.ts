@@ -3,13 +3,17 @@ import { runAgent } from './agent/agent-runner';
 import { createLlmClient, type LlmClientConfig } from './agent/llm-client';
 import { redactTranscript } from './agent/redact';
 import { BrowserClosedError, sleepUntil, throwIfAborted, watchUserClosed } from './browser-user-close';
+import { InteractionRecorder } from './interaction-recorder';
 import { asPageActions } from './playwright-page-actions';
 import type {
   BrowserLauncher,
   FlowStepResult,
   InteractiveSession,
+  RecordingSession,
   LaunchOptions,
   ResolvedFlowStep,
+  RunFlowOptions,
+  RunFlowResult,
   RunPageOptions,
   RunPageResult,
 } from './types';
@@ -53,13 +57,14 @@ export class CloakBrowserService {
 
   /**
    * Open one persistent context and execute steps sequentially. Stops at the
-   * first failed step. Always closes the context.
+   * first failed step. Closes the context unless keepOpenForRecording is set.
    */
   async runFlow(
     launch: LaunchOptions,
     steps: ResolvedFlowStep[],
     deps?: RunFlowDeps,
-  ): Promise<FlowStepResult[]> {
+    options?: RunFlowOptions,
+  ): Promise<RunFlowResult> {
     const context = await this.launcher.launchPersistentContext(launch);
     const results: FlowStepResult[] = [];
     let userClosed = false;
@@ -67,6 +72,7 @@ export class CloakBrowserService {
       userClosed = true;
     });
     const isAborted = () => userClosed;
+    let recordingSession: RecordingSession | undefined;
 
     try {
       const rawPage = await context.newPage();
@@ -158,10 +164,66 @@ export class CloakBrowserService {
           break;
         }
       }
-      return results;
+
+      const failed = results.some((r) => r.status === 'failed');
+      if (options?.keepOpenForRecording && !failed && !userClosed) {
+        const recorder = new InteractionRecorder();
+        await recorder.attach(context);
+        const listeners: Array<() => void> = [];
+        let fired = false;
+        const fire = () => {
+          if (fired) return;
+          fired = true;
+          listeners.forEach((l) => l());
+        };
+        watchUserClosed(context, fire);
+        recordingSession = {
+          getSteps: () => recorder.getSteps(),
+          onClosed(listener: () => void) {
+            listeners.push(listener);
+          },
+          async close() {
+            await context.close();
+          },
+        };
+      }
+
+      return { results, recordingSession };
     } finally {
-      await context.close();
+      if (!recordingSession) {
+        await context.close();
+      }
     }
+  }
+
+  /** Launch a visible browser window that records user interactions. */
+  async openRecordingSession(launch: LaunchOptions): Promise<RecordingSession> {
+    const context = await this.launcher.launchPersistentContext({ ...launch, headless: false });
+    const recorder = new InteractionRecorder();
+    await recorder.attach(context);
+
+    if (context.pages().length === 0) {
+      await context.newPage();
+    }
+
+    const listeners: Array<() => void> = [];
+    let fired = false;
+    const fire = () => {
+      if (fired) return;
+      fired = true;
+      listeners.forEach((l) => l());
+    };
+    watchUserClosed(context, fire);
+
+    return {
+      getSteps: () => recorder.getSteps(),
+      onClosed(listener: () => void) {
+        listeners.push(listener);
+      },
+      async close() {
+        await context.close();
+      },
+    };
   }
 
   /** Launch a visible, operator-driven window bound to a profile's userDataDir. */

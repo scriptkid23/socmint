@@ -1,27 +1,6 @@
 /** Browser-side helpers (evaluated in page context via page.evaluate strings). */
 
-const COLLECT_VISIBLE_ELEMENTS = `
-  function collectVisibleElements() {
-    const nodes = document.querySelectorAll(
-      'a, button, input, textarea, select, [role="button"], [role="link"]'
-    );
-    const visible = [];
-    const seen = new Set();
-    for (let i = 0; i < nodes.length; i++) {
-      if (visible.length >= 80) break;
-      const el = nodes[i];
-      const rect = el.getBoundingClientRect();
-      if (rect.width < 2 || rect.height < 2) continue;
-      const text = (el.innerText || el.getAttribute('aria-label') || '').trim();
-      if (!text && el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA') continue;
-      const key = el.tagName + text;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      visible.push(el);
-    }
-    return visible;
-  }
-`;
+import { COLLECT_VISIBLE_ELEMENTS } from './agent/dom-collect';
 
 export const CLICK_BY_INDEX_FN = `(function (idx) {
 ${COLLECT_VISIBLE_ELEMENTS}
@@ -30,13 +9,20 @@ ${COLLECT_VISIBLE_ELEMENTS}
   target.click();
 })`;
 
-export const FOCUS_INPUT_BY_INDEX_FN = `(function (idx) {
+export const TYPE_BY_INDEX_FN = `(function (idx, text) {
 ${COLLECT_VISIBLE_ELEMENTS}
   const target = collectVisibleElements()[idx];
   if (!target) throw new Error('No element at index ' + idx);
   target.focus();
   if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
-    if (typeof target.select === 'function') target.select();
+    target.value = text;
+    target.dispatchEvent(new Event('input', { bubbles: true }));
+    target.dispatchEvent(new Event('change', { bubbles: true }));
+  } else if (target.isContentEditable) {
+    target.textContent = text;
+    target.dispatchEvent(new Event('input', { bubbles: true }));
+  } else {
+    throw new Error('Element at index ' + idx + ' is not typeable');
   }
 })`;
 

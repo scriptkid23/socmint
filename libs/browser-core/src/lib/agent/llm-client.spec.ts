@@ -58,6 +58,31 @@ describe('createLlmClient', () => {
     expect(fetchMock.mock.calls[0][0]).toContain('generativelanguage.googleapis.com');
   });
 
+  it('calls OpenRouter chat completions', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: '{"thought":"x","action":{"type":"finish","result":{}}}' } }],
+      }),
+    });
+    const client = createLlmClient(
+      { provider: 'openrouter', model: 'openai/gpt-4o-mini', apiKey: 'or-test' },
+      fetchMock as unknown as typeof fetch,
+    );
+    const res = await client.complete(messages);
+    expect(res.content).toContain('finish');
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://openrouter.ai/api/v1/chat/completions',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          Authorization: 'Bearer or-test',
+          'HTTP-Referer': 'https://socmint.local',
+        }),
+      }),
+    );
+  });
+
   it('calls Ollama local chat API', async () => {
     const fetchMock = jest.fn().mockResolvedValue({
       ok: true,

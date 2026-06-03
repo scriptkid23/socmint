@@ -107,7 +107,7 @@ describe('resolveChains', () => {
     ]);
   });
 
-  it('maps agent node to FlowStep with allowDomains from prior goto', () => {
+  it('maps agent node with restrictToGotoDomains from prior goto', () => {
     const g = graph(
       [
         { id: 'p', type: 'profile', position: pos, data: { profileId: 'prof-1' } },
@@ -121,6 +121,7 @@ describe('resolveChains', () => {
             provider: 'openai',
             model: 'gpt-4o-mini',
             apiKey: 'sk-x',
+            restrictToGotoDomains: true,
           },
         },
       ],
@@ -136,6 +137,81 @@ describe('resolveChains', () => {
       allowDomains: ['facebook.com'],
       readOnly: true,
       maxSteps: 25,
+    });
+  });
+
+  it('sets endsWithRecord for profile → goto → record (Run keeps browser open)', () => {
+    const g = graph(
+      [
+        { id: 'p', type: 'profile', position: pos, data: { profileId: 'prof-1' } },
+        { id: 'g', type: 'goto', position: pos, data: { url: 'https://google.com' } },
+        { id: 'r', type: 'record', position: pos, data: { steps: [] } },
+      ],
+      [
+        { id: 'e1', source: 'p', target: 'g' },
+        { id: 'e2', source: 'g', target: 'r' },
+      ],
+    );
+    expect(resolveChains(g)).toEqual([
+      {
+        profileId: 'prof-1',
+        steps: [{ type: 'goto', url: 'https://google.com' }],
+        endsWithRecord: true,
+      },
+    ]);
+  });
+
+  it('expands record node navigations into goto steps', () => {
+    const g = graph(
+      [
+        { id: 'p', type: 'profile', position: pos, data: { profileId: 'prof-1' } },
+        {
+          id: 'r',
+          type: 'record',
+          position: pos,
+          data: {
+            steps: [
+              { type: 'navigate', url: 'https://example.com/', at: 't1' },
+              { type: 'click', tag: 'a', text: 'x', href: null, selector: 'a', at: 't2' },
+            ],
+          },
+        },
+      ],
+      [{ id: 'e1', source: 'p', target: 'r' }],
+    );
+    const jobs = resolveChains(g);
+    expect(jobs[0].steps).toEqual([
+      { type: 'goto', url: 'https://example.com/' },
+      { type: 'wait', ms: 800 },
+    ]);
+  });
+
+  it('allows all domains by default so agent can open search result pages', () => {
+    const g = graph(
+      [
+        { id: 'p', type: 'profile', position: pos, data: { profileId: 'prof-1' } },
+        { id: 'g', type: 'goto', position: pos, data: { url: 'https://www.google.com/' } },
+        {
+          id: 'a',
+          type: 'agent',
+          position: pos,
+          data: {
+            prompt: 'find restaurants and open first result',
+            provider: 'openai',
+            model: 'gpt-4o-mini',
+            apiKey: 'sk-x',
+          },
+        },
+      ],
+      [
+        { id: 'e1', source: 'p', target: 'g' },
+        { id: 'e2', source: 'g', target: 'a' },
+      ],
+    );
+    const jobs = resolveChains(g);
+    expect(jobs[0].steps[1]).toMatchObject({
+      type: 'agent',
+      allowDomains: [],
     });
   });
 

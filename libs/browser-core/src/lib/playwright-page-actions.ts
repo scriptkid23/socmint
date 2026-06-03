@@ -1,15 +1,18 @@
 import type { Page } from 'playwright-core';
 import { EXTRACT_DOM_SCRIPT } from './agent/dom-serializer';
 import type { DomElement, PageActions } from './agent/types';
-import {
-  CLICK_BY_INDEX_FN,
-  FOCUS_INPUT_BY_INDEX_FN,
-  SCROLL_FN,
-} from './playwright-browser-scripts';
+import { CLICK_BY_INDEX_FN, SCROLL_FN, TYPE_BY_INDEX_FN } from './playwright-browser-scripts';
 
-function evaluateInPage(page: Page, fnSource: string, arg: number | string): Promise<void> {
-  // fnSource is a parenthesized function expression; invoke it with the arg.
-  const expr = `${fnSource.trim()}(${JSON.stringify(arg)})`;
+const SETTLE_TIMEOUT_MS = 15000;
+const NAV_WAIT_MS = 8000;
+const EVALUATE_MAX_ATTEMPTS = 3;
+
+function evaluateInPage(
+  page: Page,
+  fnSource: string,
+  ...args: Array<number | string>
+): Promise<void> {
+  const expr = `${fnSource.trim()}(${args.map((a) => JSON.stringify(a)).join(', ')})`;
   return page.evaluate(expr) as Promise<void>;
 }
 
@@ -23,7 +26,7 @@ export function asPageActions(raw: unknown): PageActions {
   return wrapPlaywrightPage(raw);
 }
 
-function isContextDestroyed(err: unknown): boolean {
+export function isContextDestroyed(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
   return /Execution context was destroyed|context or browser has been closed|frame was detached/i.test(
     msg,
@@ -32,11 +35,40 @@ function isContextDestroyed(err: unknown): boolean {
 
 /** Let any in-flight navigation settle so the next page.evaluate has a live context. */
 async function settle(page: Page): Promise<void> {
-  try {
-    await page.waitForLoadState('domcontentloaded', { timeout: 15000 });
-  } catch {
-    // ignore: page may already be loaded or have no pending navigation
+  for (const state of ['domcontentloaded', 'load'] as const) {
+    try {
+      await page.waitForLoadState(state, { timeout: SETTLE_TIMEOUT_MS });
+    } catch {
+      // page may already be at this state or navigation may have been aborted
+    }
   }
+}
+
+async function waitForPossibleNavigation(page: Page): Promise<void> {
+  try {
+    await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: NAV_WAIT_MS });
+  } catch {
+    // no navigation (e.g. click on a button that stays on the same page)
+  }
+}
+
+/** Retry evaluate when a navigation destroys the execution context mid-call. */
+export async function evaluateWithRetry<T>(
+  page: Page,
+  fn: () => Promise<T>,
+  maxAttempts = EVALUATE_MAX_ATTEMPTS,
+): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (!isContextDestroyed(err) || attempt >= maxAttempts - 1) throw err;
+      await settle(page);
+    }
+  }
+  throw lastErr;
 }
 
 export function wrapPlaywrightPage(raw: unknown): PageActions {
@@ -53,30 +85,25 @@ export function wrapPlaywrightPage(raw: unknown): PageActions {
     url: () => page.url(),
     screenshot: (opts) => page.screenshot({ path: opts.path, fullPage: opts.fullPage }),
     async readDom(): Promise<DomElement[]> {
-      try {
+      return evaluateWithRetry(page, async () => {
         return (await page.evaluate(EXTRACT_DOM_SCRIPT)) as DomElement[];
-      } catch (err) {
-        // A navigation (e.g. after pressEnter) can destroy the execution
-        // context mid-evaluate. Wait for the new document, then retry once.
-        if (!isContextDestroyed(err)) throw err;
-        await settle(page);
-        return (await page.evaluate(EXTRACT_DOM_SCRIPT)) as DomElement[];
-      }
+      });
     },
     async click(index: number) {
-      await evaluateInPage(page, CLICK_BY_INDEX_FN, index);
+      await evaluateWithRetry(page, () => evaluateInPage(page, CLICK_BY_INDEX_FN, index));
+      await waitForPossibleNavigation(page);
       await settle(page);
     },
     async type(index: number, text: string) {
-      await evaluateInPage(page, FOCUS_INPUT_BY_INDEX_FN, index);
-      await page.keyboard.type(text);
+      await evaluateWithRetry(page, () => evaluateInPage(page, TYPE_BY_INDEX_FN, index, text));
     },
     async pressEnter() {
       await page.keyboard.press('Enter');
+      await waitForPossibleNavigation(page);
       await settle(page);
     },
     async scroll(direction: 'up' | 'down') {
-      await evaluateInPage(page, SCROLL_FN, direction);
+      await evaluateWithRetry(page, () => evaluateInPage(page, SCROLL_FN, direction));
     },
     isClosed: () => page.isClosed(),
   };

@@ -21,11 +21,18 @@ When the task is complete, use finish with the collected structured result.
 Do not invent element indices; only use indices from the DOM list.
 When read-only mode is indicated, never navigate outside allowed domains and never submit posts or send messages.
 
+IMPORTANT rules for search and opening result pages:
+- To open a search result or restaurant page, use click on the link's [index] from the DOM list. Do NOT use navigate to external URLs unless that domain is listed as allowed.
+- If a click does not change the page, do NOT click the same [index] again — scroll down or choose a different index.
+- After search results load, scroll if needed to bring links into the DOM list (max 80 elements shown).
+- For tasks like "find top restaurants": extract titles/links from the results page, then click the first relevant link index to open it, then finish with what you see on the detail page.
+
 IMPORTANT rules for typing and search:
 - The DOM list shows the current value of each input/textarea as value="...". After a type action succeeds, that value will appear on the element on the next step.
 - If an input/textarea already shows the text you intended to enter (check its value="..."), do NOT type it again. Move on (usually pressEnter to submit a search).
 - To run a search: type the query into the search box once, then on the next step use pressEnter. Do not repeat the same type action.
-- After submitting, read the results from the DOM and use extract/finish to return them. Never repeat an identical action more than twice.`;
+- After submitting, read the results from the DOM and use extract/finish to return them. Never repeat an identical action more than twice.
+- If "Recent steps" shows you already typed the same text, do NOT type again — use pressEnter or click next.`;
 
 export interface LlmClientConfig {
   provider: AgentProvider;
@@ -47,20 +54,29 @@ export function createLlmClient(
       return createGeminiClient(config, fetchImpl);
     case 'ollama':
       return createOllamaClient(config, fetchImpl);
+    case 'openrouter':
+      return createOpenRouterClient(config, fetchImpl);
     default:
       throw new Error(`Unsupported LLM provider: ${config.provider}`);
   }
 }
 
-function createOpenAiClient(config: LlmClientConfig, fetchImpl: typeof fetch): LlmClient {
+function createOpenAiCompatibleClient(
+  config: LlmClientConfig,
+  fetchImpl: typeof fetch,
+  url: string,
+  label: string,
+  extraHeaders?: Record<string, string>,
+): LlmClient {
   return {
     async complete(messages: LlmMessage[], opts?: LlmCompleteOptions) {
-      const res = await fetchImpl('https://api.openai.com/v1/chat/completions', {
+      const res = await fetchImpl(url, {
         method: 'POST',
         signal: opts?.signal,
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${config.apiKey}`,
+          ...extraHeaders,
         },
         body: JSON.stringify({
           model: config.model,
@@ -70,16 +86,35 @@ function createOpenAiClient(config: LlmClientConfig, fetchImpl: typeof fetch): L
       });
       if (!res.ok) {
         const body = await res.text().catch(() => '');
-        throw new Error(`OpenAI request failed (${res.status}): ${body.slice(0, 200)}`);
+        throw new Error(`${label} request failed (${res.status}): ${body.slice(0, 200)}`);
       }
       const data = (await res.json()) as {
         choices?: Array<{ message?: { content?: string } }>;
       };
       const content = data.choices?.[0]?.message?.content;
-      if (!content) throw new Error('OpenAI returned empty content');
+      if (!content) throw new Error(`${label} returned empty content`);
       return { content };
     },
   };
+}
+
+function createOpenAiClient(config: LlmClientConfig, fetchImpl: typeof fetch): LlmClient {
+  return createOpenAiCompatibleClient(
+    config,
+    fetchImpl,
+    'https://api.openai.com/v1/chat/completions',
+    'OpenAI',
+  );
+}
+
+function createOpenRouterClient(config: LlmClientConfig, fetchImpl: typeof fetch): LlmClient {
+  return createOpenAiCompatibleClient(
+    config,
+    fetchImpl,
+    'https://openrouter.ai/api/v1/chat/completions',
+    'OpenRouter',
+    { 'HTTP-Referer': 'https://socmint.local', 'X-Title': 'Socmint' },
+  );
 }
 
 function createAnthropicClient(config: LlmClientConfig, fetchImpl: typeof fetch): LlmClient {

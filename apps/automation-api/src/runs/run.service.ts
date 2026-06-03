@@ -158,6 +158,14 @@ export class RunService {
           transcriptPath: resolve(runDir, `step-${i}-agent-transcript.json`),
         };
       }
+      if (step.type === 'wallet') {
+        return {
+          type: 'wallet',
+          privateKey: step.privateKey,
+          chains: step.chains,
+          activeChainId: step.activeChainId,
+        };
+      }
       return { type: 'goto', url: step.url, waitUntil: step.waitUntil, timeoutMs: step.timeoutMs };
     });
 

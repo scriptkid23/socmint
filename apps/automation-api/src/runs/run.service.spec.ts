@@ -46,6 +46,12 @@ class FakeContext implements BrowserContextLike {
   async close() {
     /* noop */
   }
+  async addInitScript() {
+    /* noop */
+  }
+  async exposeFunction() {
+    /* noop */
+  }
 }
 
 class FakeLauncher implements BrowserLauncher {
@@ -253,5 +259,34 @@ describe('RunService.executeFlow', () => {
     expect(rec.error).toBe('launch boom');
     expect(rec.steps).toEqual([]);
     expect(await lock.isLocked(resolve(dataRoot, 'profiles', profile.id))).toBe(false);
+  });
+
+  it('forwards a wallet step to runFlow unchanged', async () => {
+    const profile = await profiles.create({ label: 'p-wallet' });
+    const browser = {
+      runFlow: jest.fn().mockResolvedValue({ results: [
+        { type: 'wallet', status: 'completed', error: null },
+      ] }),
+    };
+    const svc = service(browser);
+
+    await svc.executeFlow(profile.id, [
+      {
+        type: 'wallet',
+        privateKey: '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
+        chains: [{ chainId: 1, rpcUrl: 'https://eth.example', name: 'Ethereum' }],
+        activeChainId: 1,
+      },
+    ]);
+
+    const resolved = browser.runFlow.mock.calls[0][1];
+    expect(resolved).toEqual([
+      {
+        type: 'wallet',
+        privateKey: '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
+        chains: [{ chainId: 1, rpcUrl: 'https://eth.example', name: 'Ethereum' }],
+        activeChainId: 1,
+      },
+    ]);
   });
 });

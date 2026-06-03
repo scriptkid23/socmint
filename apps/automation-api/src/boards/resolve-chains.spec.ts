@@ -299,6 +299,52 @@ describe('resolveChains', () => {
     expect(() => resolveChains(g)).toThrow(/more than one node/i);
   });
 
+  it('compiles a metamask node into a single wallet step', () => {
+    const graph = {
+      nodes: [
+        { id: 'p', type: 'profile', position: { x: 0, y: 0 }, data: { profileId: 'prof-1' } },
+        {
+          id: 'm',
+          type: 'metamask',
+          position: { x: 0, y: 0 },
+          data: {
+            privateKey: '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
+            chains: [{ chainId: 1, rpcUrl: 'https://eth.example', name: 'Ethereum' }],
+            activeChainId: 1,
+          },
+        },
+      ],
+      edges: [{ id: 'e1', source: 'p', target: 'm' }],
+    } as never;
+
+    const jobs = resolveChains(graph);
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0].steps).toEqual([
+      {
+        type: 'wallet',
+        privateKey: '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
+        chains: [{ chainId: 1, rpcUrl: 'https://eth.example', name: 'Ethereum' }],
+        activeChainId: 1,
+      },
+    ]);
+  });
+
+  it('throws when the metamask private key is malformed', () => {
+    const graph = {
+      nodes: [
+        { id: 'p', type: 'profile', position: { x: 0, y: 0 }, data: { profileId: 'prof-1' } },
+        {
+          id: 'm',
+          type: 'metamask',
+          position: { x: 0, y: 0 },
+          data: { privateKey: 'nope', chains: [{ chainId: 1, rpcUrl: 'https://x', name: 'X' }], activeChainId: 1 },
+        },
+      ],
+      edges: [{ id: 'e1', source: 'p', target: 'm' }],
+    } as never;
+    expect(() => resolveChains(graph)).toThrow(/private key/i);
+  });
+
   it('throws on a cycle', () => {
     const g = graph(
       [

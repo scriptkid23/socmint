@@ -141,4 +141,37 @@ export const NODE_CHAIN_REGISTRY: ChainRegistry = {
       return { steps, endsWithRecord: true };
     },
   },
+
+  metamask: {
+    toSteps(node) {
+      const d = node.data;
+      if (!/^0x[0-9a-fA-F]{64}$/.test(d.privateKey ?? '')) {
+        throw new BoardGraphError(`MetaMask node ${node.id} has an invalid private key`);
+      }
+      if (!d.chains?.length) {
+        throw new BoardGraphError(`MetaMask node ${node.id} has no chains`);
+      }
+      for (const c of d.chains) {
+        if (!Number.isInteger(c.chainId) || c.chainId <= 0) {
+          throw new BoardGraphError(`MetaMask node ${node.id} has an invalid chainId`);
+        }
+        if (!c.rpcUrl?.trim()) {
+          throw new BoardGraphError(`MetaMask node ${node.id} has a chain with no rpcUrl`);
+        }
+      }
+      if (!d.chains.some((c) => c.chainId === d.activeChainId)) {
+        throw new BoardGraphError(`MetaMask node ${node.id} activeChainId is not in its chains`);
+      }
+      return {
+        steps: [
+          {
+            type: 'wallet',
+            privateKey: d.privateKey,
+            chains: d.chains.map((c) => ({ chainId: c.chainId, rpcUrl: c.rpcUrl, name: c.name })),
+            activeChainId: d.activeChainId,
+          },
+        ],
+      };
+    },
+  },
 };

@@ -92,6 +92,7 @@
     "react-dom": "^19.0.0",
     "reflect-metadata": "^0.1.13",
     "rxjs": "^7.8.0",
-    "sonner": "^2.0.7"
+    "sonner": "^2.0.7",
+    "viem": "^2.52.0"
   }
 }

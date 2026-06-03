@@ -1,5 +1,6 @@
 import type { AgentLimits, AgentStopReason, AgentTask } from './agent/types';
 import type { RecordedStep } from './recorded-step.types';
+import type { WalletChainConfig } from './wallet/wallet.types';
 
 export type { AgentLimits, AgentStopReason, AgentTask } from './agent/types';
 
@@ -44,6 +45,10 @@ export interface BrowserContextLike {
   pages(): PageLike[];
   on(event: 'close', listener: () => void): void;
   close(): Promise<void>;
+  /** Register a script run on every new document (Playwright BrowserContext.addInitScript). */
+  addInitScript(script: string): Promise<void>;
+  /** Expose a Node function callable from the page as window[name] (Playwright exposeFunction). */
+  exposeFunction(name: string, callback: (arg: unknown) => unknown): Promise<void>;
 }
 
 /** Injectable seam so the service can be unit-tested without real Chromium. */
@@ -71,7 +76,8 @@ export type ResolvedFlowStep =
   | { type: 'goto'; url: string; waitUntil?: WaitUntil; timeoutMs?: number }
   | { type: 'wait'; ms: number }
   | { type: 'agent'; task: AgentTask; limits: AgentLimits; transcriptPath?: string }
-  | { type: 'screenshot'; screenshotPath: string };
+  | { type: 'screenshot'; screenshotPath: string }
+  | { type: 'wallet'; privateKey: string; chains: WalletChainConfig[]; activeChainId: number };
 
 export interface RunFlowOptions {
   /** When true, keep the browser open and attach a recorder after steps finish. */
@@ -114,4 +120,9 @@ export type FlowStepResult =
       status: 'completed' | 'failed';
       error: string | null;
       screenshotPath?: string | null;
+    }
+  | {
+      type: 'wallet';
+      status: 'completed' | 'failed';
+      error: null | string;
     };

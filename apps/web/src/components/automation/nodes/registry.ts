@@ -5,7 +5,9 @@ import {
   type AgentProvider,
   type BoardNode,
   type BoardNodeData,
+  type ChainConfig,
   type GotoNodeData,
+  type MetaMaskNodeData,
   type Profile,
   type ProfileNodeData,
   type RecordedStep,
@@ -18,9 +20,13 @@ import { WaitNode } from './wait-node';
 import { AgentNode } from './agent-node';
 import { ScreenshotNode } from './screenshot-node';
 import { RecordNode } from './record-node';
+import { MetaMaskNode } from './metamask-node';
 
 export const DEFAULT_WAIT_MS = 3000;
 const DEFAULT_OLLAMA_BASE_URL = 'http://127.0.0.1:11434';
+const DEFAULT_METAMASK_CHAINS: ChainConfig[] = [
+  { chainId: 1, rpcUrl: 'https://eth.llamarpc.com', name: 'Ethereum' },
+];
 
 export type NodeType = BoardNode['type'];
 
@@ -154,7 +160,7 @@ export const NODE_DESCRIPTORS: NodeRegistry = {
       apiKey: '',
       baseUrl: DEFAULT_OLLAMA_BASE_URL,
       restrictToGotoDomains: false,
-      readOnly: true,
+      readOnly: false,
     }),
     serialize: (d) => ({
       prompt: (d.prompt as string) ?? '',
@@ -237,6 +243,49 @@ export const NODE_DESCRIPTORS: NodeRegistry = {
       };
     },
   },
+
+  metamask: {
+    label: 'MetaMask',
+    component: MetaMaskNode,
+    defaultData: () => ({
+      privateKey: '',
+      chains: DEFAULT_METAMASK_CHAINS.map((c) => ({ ...c })),
+      activeChainId: 1,
+    }),
+    serialize: (d) => ({
+      privateKey: (d.privateKey as string) ?? '',
+      chains: ((d.chains as ChainConfig[]) ?? []).map((c) => ({
+        chainId: Number(c.chainId),
+        rpcUrl: c.rpcUrl ?? '',
+        name: c.name ?? '',
+      })),
+      activeChainId: Number(d.activeChainId ?? 1),
+    }),
+    inject: (d, ctx) => ({
+      privateKey: (d.privateKey as string) ?? '',
+      chains: (d.chains as ChainConfig[]) ?? [],
+      activeChainId: Number(d.activeChainId ?? 1),
+      onChange: (patch: Record<string, unknown>) => ctx.patch(patch),
+    }),
+    validate: (node) => {
+      const errors: GraphError[] = [];
+      const d = node.data as MetaMaskNodeData;
+      if (!/^0x[0-9a-fA-F]{64}$/.test(d.privateKey ?? '')) {
+        errors.push({ nodeId: node.id, message: 'MetaMask private key is invalid (0x + 64 hex)' });
+      }
+      if (!d.chains?.length) {
+        errors.push({ nodeId: node.id, message: 'MetaMask node has no chains' });
+      } else {
+        if (d.chains.some((c) => !c.rpcUrl?.trim())) {
+          errors.push({ nodeId: node.id, message: 'A MetaMask chain has no RPC URL' });
+        }
+        if (!d.chains.some((c) => c.chainId === d.activeChainId)) {
+          errors.push({ nodeId: node.id, message: 'Active chain is not in the chain list' });
+        }
+      }
+      return errors;
+    },
+  },
 };
 
 /** Toolbar / add-button order. */
@@ -247,6 +296,7 @@ export const NODE_ORDER: NodeType[] = [
   'agent',
   'screenshot',
   'record',
+  'metamask',
 ];
 
 /** Component map for ReactFlow's `nodeTypes` prop. */

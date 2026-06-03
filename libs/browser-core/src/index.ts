@@ -11,4 +11,4 @@ export { createLlmClient } from './lib/agent/llm-client';
 export * from './lib/wallet/wallet.types';
 export { WalletHandler } from './lib/wallet/wallet-handler';
 export { createViemSigner } from './lib/wallet/viem-signer';
-export { buildWalletInitScript, WALLET_BINDING_NAME } from './lib/wallet/provider-injection';
+export { buildWalletInitScript } from './lib/wallet/provider-injection';

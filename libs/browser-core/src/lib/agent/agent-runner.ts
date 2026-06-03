@@ -1,5 +1,11 @@
 import { formatDomForPrompt, parseAgentDecision } from './dom-serializer';
 import { AGENT_SYSTEM_PROMPT } from './llm-client';
+import { STATE_CHANGING, pageSignature } from './task-completion';
+
+/** Delay so the DOM can reflect the effect of a state-changing action. */
+const DOM_SETTLE_MS = 500;
+/** Consecutive unchanged observations (after acting) that mean "task settled". */
+const NO_PROGRESS_LIMIT = 3;
 import type {
   AgentAction,
   AgentDecision,
@@ -118,8 +124,8 @@ export function buildMessages(
   transcript: AgentResult['transcript'] = [],
 ): LlmMessage[] {
   const guard = limits.readOnly
-    ? `Read-only mode: only browse and extract. Allowed domains: ${limits.allowDomains.join(', ') || '(none specified)'}.`
-    : `Allowed domains: ${limits.allowDomains.join(', ') || '(any)'}.`;
+    ? `Read-only mode: you may click buttons and links on the current site and extract data. Do NOT navigate away unless the URL host is in: ${limits.allowDomains.join(', ') || '(stay on current site)'}. When the user task is complete, use finish immediately.`
+    : `Allowed domains: ${limits.allowDomains.join(', ') || '(any)'}. When the user task is complete, use finish immediately — do not repeat steps from Recent steps.`;
   const history = formatStepHistory(transcript);
   return [
     { role: 'system', content: AGENT_SYSTEM_PROMPT },
@@ -186,6 +192,10 @@ export async function runAgent(
   let repeatCount = 0;
   /** Set when a click did not change the page URL (model should pick another index or scroll). */
   let stuckClick: { index: number; url: string } | null = null;
+  /** Page fingerprint + how long it has stayed unchanged while the agent keeps acting. */
+  let lastSignature: string | null = null;
+  let noProgress = 0;
+  let effectiveActions = 0;
 
   while (stepsUsed < limits.maxSteps) {
     if (page.isClosed?.()) {
@@ -197,6 +207,21 @@ export async function runAgent(
     stepsUsed++;
 
     const dom = await page.readDom();
+
+    // General "task settled" check: once the agent has done at least one
+    // page-changing action, if the observed page stops changing for several
+    // steps the task is effectively done — finish and let the browser close.
+    const signature = pageSignature(page.url(), dom);
+    if (signature === lastSignature) {
+      noProgress++;
+    } else {
+      noProgress = 0;
+      lastSignature = signature;
+    }
+    if (noProgress >= NO_PROGRESS_LIMIT && effectiveActions >= 1) {
+      return finish('finished', stepsUsed, collected, transcript, null);
+    }
+
     const observation = formatDomForPrompt(dom);
     const messages = buildMessages(task.prompt, page.url(), observation, limits, transcript);
 
@@ -331,8 +356,30 @@ export async function runAgent(
       if (decision.done) {
         return finish('finished', stepsUsed, collected, transcript, null);
       }
+
+      if (STATE_CHANGING.has(decision.action.type)) {
+        effectiveActions++;
+        await new Promise((r) => setTimeout(r, DOM_SETTLE_MS));
+      }
     } catch (e) {
-      return finish('error', stepsUsed, collected, transcript, e);
+      // The browser/window is gone — unrecoverable.
+      if (page.isClosed?.()) {
+        return finish('error', stepsUsed, collected, transcript, new Error('Browser window was closed'));
+      }
+      // The action itself failed (e.g. the model tried to `type` into a
+      // non-typeable element like a dropdown trigger, or picked a stale
+      // [index]). Feed the error back as an observation so the model can pick a
+      // different action instead of aborting the whole run. The repeat guard
+      // above still stops it if it keeps choosing the same failing action.
+      const message = e instanceof Error ? e.message : String(e);
+      transcript.push({
+        step: stepsUsed,
+        thought: decision.thought,
+        action: decision.action,
+        observation: `Action failed: ${message}. Choose a different element or action — e.g. click to open a dropdown/menu before typing, or pick another [index].`,
+        blocked: true,
+      });
+      continue;
     }
 
     transcript.push({

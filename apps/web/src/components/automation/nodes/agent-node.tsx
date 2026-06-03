@@ -98,7 +98,7 @@ export function AgentNode({ data }: AgentNodeProps) {
             checked={data.readOnly !== false}
             onChange={(e) => patch({ readOnly: e.target.checked })}
           />
-          Read-only
+          Read-only (no off-site navigate)
         </label>
       </div>
       <Handle type="source" position={Position.Right} />

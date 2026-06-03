@@ -174,4 +174,24 @@ export const NODE_CHAIN_REGISTRY: ChainRegistry = {
       };
     },
   },
+
+  fill: {
+    toSteps(node) {
+      const selector = node.data.selector?.trim();
+      if (!selector) {
+        throw new BoardGraphError(`Fill node ${node.id} has an empty selector`);
+      }
+      return { steps: [{ type: 'fill', selector, value: node.data.value ?? '' }] };
+    },
+  },
+
+  click: {
+    toSteps(node) {
+      const selector = node.data.selector?.trim();
+      if (!selector) {
+        throw new BoardGraphError(`Click node ${node.id} has an empty selector`);
+      }
+      return { steps: [{ type: 'click', selector }] };
+    },
+  },
 };

@@ -5,10 +5,7 @@ import { redactTranscript } from './agent/redact';
 import { BrowserClosedError, sleepUntil, throwIfAborted, watchUserClosed } from './browser-user-close';
 import { InteractionRecorder } from './interaction-recorder';
 import { asPageActions } from './playwright-page-actions';
-import { WalletHandler } from './wallet/wallet-handler';
-import { createViemSigner } from './wallet/viem-signer';
-import { buildWalletInitScript, WALLET_BINDING_NAME } from './wallet/provider-injection';
-import type { WalletRpcResult } from './wallet/wallet.types';
+import { buildWalletInitScript } from './wallet/provider-injection';
 import type {
   BrowserLauncher,
   FlowStepResult,
@@ -131,27 +128,22 @@ export class CloakBrowserService {
             });
             if (agentResult.status === 'failed') break;
           } else if (step.type === 'wallet') {
-            const signer = createViemSigner(step.privateKey);
-            const handler = new WalletHandler(
-              { privateKey: step.privateKey, chains: step.chains, activeChainId: step.activeChainId },
-              signer,
-            );
-            await context.exposeFunction(
-              WALLET_BINDING_NAME,
-              async (arg: unknown): Promise<WalletRpcResult> => {
-                const { method, params } = (arg ?? {}) as { method: string; params?: unknown[] };
-                try {
-                  return { ok: true, result: await handler.handle({ method, params }) };
-                } catch (e) {
-                  const code = (e as { code?: number }).code ?? 4200;
-                  return { ok: false, error: { code, message: e instanceof Error ? e.message : String(e) } };
-                }
-              },
-            );
+            // cloakbrowser strips Playwright bindings, so the provider signs
+            // in-page (viem). Inject before any dApp navigation.
             await context.addInitScript(
-              buildWalletInitScript(handler.address, handler.activeChainIdHex),
+              buildWalletInitScript({
+                privateKey: step.privateKey,
+                chains: step.chains,
+                activeChainId: step.activeChainId,
+              }),
             );
             results.push({ type: 'wallet', status: 'completed', error: null });
+          } else if (step.type === 'fill') {
+            await page.fill(step.selector, step.value);
+            results.push({ type: 'fill', status: 'completed', error: null });
+          } else if (step.type === 'click') {
+            await page.clickSelector(step.selector);
+            results.push({ type: 'click', status: 'completed', error: null });
           } else if (step.type === 'screenshot') {
             await page.screenshot({ path: step.screenshotPath, fullPage: true });
             results.push({
@@ -186,6 +178,10 @@ export class CloakBrowserService {
             });
           } else if (step.type === 'wallet') {
             results.push({ type: 'wallet', ...base });
+          } else if (step.type === 'fill') {
+            results.push({ type: 'fill', ...base });
+          } else if (step.type === 'click') {
+            results.push({ type: 'click', ...base });
           } else if (step.type === 'screenshot') {
             results.push({ type: 'screenshot', ...base, screenshotPath: null });
           }

@@ -63,6 +63,13 @@ export interface MetaMaskNodeData {
   chains: ChainConfig[];
   activeChainId: number;
 }
+export interface FillNodeData {
+  selector: string;
+  value: string;
+}
+export interface ClickNodeData {
+  selector: string;
+}
 
 interface NodeBase {
   id: string;
@@ -76,7 +83,9 @@ export type BoardNode =
   | (NodeBase & { type: 'agent'; data: AgentNodeData })
   | (NodeBase & { type: 'screenshot'; data: ScreenshotNodeData })
   | (NodeBase & { type: 'record'; data: RecordNodeData })
-  | (NodeBase & { type: 'metamask'; data: MetaMaskNodeData });
+  | (NodeBase & { type: 'metamask'; data: MetaMaskNodeData })
+  | (NodeBase & { type: 'fill'; data: FillNodeData })
+  | (NodeBase & { type: 'click'; data: ClickNodeData });
 
 export interface BoardEdge {
   id: string;

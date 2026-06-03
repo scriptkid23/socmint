@@ -1,7 +1,13 @@
 import type { Page } from 'playwright-core';
 import { EXTRACT_DOM_SCRIPT } from './agent/dom-serializer';
 import type { DomElement, PageActions } from './agent/types';
-import { CLICK_BY_INDEX_FN, SCROLL_FN, TYPE_BY_INDEX_FN } from './playwright-browser-scripts';
+import {
+  CLICK_BY_INDEX_FN,
+  CLICK_BY_SELECTOR_FN,
+  FILL_BY_SELECTOR_FN,
+  SCROLL_FN,
+  TYPE_BY_INDEX_FN,
+} from './playwright-browser-scripts';
 
 const SETTLE_TIMEOUT_MS = 15000;
 const NAV_WAIT_MS = 8000;
@@ -96,6 +102,14 @@ export function wrapPlaywrightPage(raw: unknown): PageActions {
     },
     async type(index: number, text: string) {
       await evaluateWithRetry(page, () => evaluateInPage(page, TYPE_BY_INDEX_FN, index, text));
+    },
+    async fill(selector: string, value: string) {
+      await evaluateWithRetry(page, () => evaluateInPage(page, FILL_BY_SELECTOR_FN, selector, value));
+    },
+    async clickSelector(selector: string) {
+      await evaluateWithRetry(page, () => evaluateInPage(page, CLICK_BY_SELECTOR_FN, selector));
+      await waitForPossibleNavigation(page);
+      await settle(page);
     },
     async pressEnter() {
       await page.keyboard.press('Enter');

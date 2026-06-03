@@ -21,6 +21,8 @@ class FakePage implements PageActions {
     this.clicks.push(index);
   }
   async type() {}
+  async fill() {}
+  async clickSelector() {}
   async pressEnter() {}
   async scroll() {}
   async readDom() {
@@ -193,6 +195,23 @@ describe('runAgent', () => {
     expect(result.error).toMatch(/repeated/i);
   });
 
+  it('auto-finishes when the page stops changing after acting (general, no keywords)', async () => {
+    const page = new FakePage();
+    page.urlValue = 'https://example.com/dashboard';
+    page.scroll = async () => {
+      /* no-op: page does not change */
+    };
+    const llm = scriptedLlm([
+      JSON.stringify({ thought: 'scroll to look', action: { type: 'scroll', direction: 'down' } }),
+    ]);
+
+    const result = await runAgent(page, task, llm, { ...limits, maxSteps: 20 });
+
+    expect(result.stopReason).toBe('finished');
+    expect(result.status).toBe('completed');
+    expect(result.stepsUsed).toBeLessThan(20);
+  });
+
   it('detects stuck click from URL', () => {
     expect(
       isClickStuck(
@@ -214,6 +233,43 @@ describe('runAgent', () => {
     const dom = [{ index: 0, tag: 'input', role: null, text: 'q', href: null, value: 'hello' }];
     expect(isTypeRedundant(dom, { type: 'type', index: 0, text: 'hello' })).toBe(true);
     expect(isTypeRedundant(dom, { type: 'type', index: 0, text: 'other' })).toBe(false);
+  });
+
+  it('recovers when an action throws (e.g. typing a non-typeable element) instead of failing the run', async () => {
+    const page = new FakePage();
+    page.type = async () => {
+      throw new Error('Element at index 4 is not typeable: BUTTON[type=button]');
+    };
+    const llm = scriptedLlm([
+      JSON.stringify({ thought: 'type', action: { type: 'type', index: 4, text: 'hi' } }),
+      JSON.stringify({ thought: 'done', action: { type: 'finish', result: { ok: true } }, done: true }),
+    ]);
+
+    const result = await runAgent(page, task, llm, limits);
+
+    expect(result.status).toBe('completed');
+    expect(result.result).toEqual({ ok: true });
+    expect(
+      result.transcript.some((t) => t.blocked && /not typeable/i.test(t.observation)),
+    ).toBe(true);
+  });
+
+  it('still aborts when an action throws because the browser was closed mid-action', async () => {
+    const page = new FakePage();
+    let closed = false;
+    page.isClosed = () => closed;
+    page.type = async () => {
+      closed = true;
+      throw new Error('context or browser has been closed');
+    };
+    const llm = scriptedLlm([
+      JSON.stringify({ thought: 'type', action: { type: 'type', index: 0, text: 'hi' } }),
+    ]);
+
+    const result = await runAgent(page, task, llm, limits);
+
+    expect(result.status).toBe('failed');
+    expect(result.error).toMatch(/closed/i);
   });
 
   it('stops when the browser page is closed', async () => {

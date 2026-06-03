@@ -345,6 +345,64 @@ describe('resolveChains', () => {
     expect(() => resolveChains(graph)).toThrow(/private key/i);
   });
 
+  it('compiles a fill node into a single fill step', () => {
+    const g = graph(
+      [
+        { id: 'p', type: 'profile', position: pos, data: { profileId: 'prof-1' } },
+        { id: 'g', type: 'goto', position: pos, data: { url: 'https://form' } },
+        { id: 'f', type: 'fill', position: pos, data: { selector: '#email', value: 'hi@example.com' } },
+      ],
+      [
+        { id: 'e1', source: 'p', target: 'g' },
+        { id: 'e2', source: 'g', target: 'f' },
+      ],
+    );
+    expect(resolveChains(g)).toEqual([
+      {
+        profileId: 'prof-1',
+        steps: [
+          { type: 'goto', url: 'https://form' },
+          { type: 'fill', selector: '#email', value: 'hi@example.com' },
+        ],
+      },
+    ]);
+  });
+
+  it('throws when a fill node has an empty selector', () => {
+    const g = graph(
+      [
+        { id: 'p', type: 'profile', position: pos, data: { profileId: 'prof-1' } },
+        { id: 'f', type: 'fill', position: pos, data: { selector: '  ', value: 'x' } },
+      ],
+      [{ id: 'e1', source: 'p', target: 'f' }],
+    );
+    expect(() => resolveChains(g)).toThrow(/selector/i);
+  });
+
+  it('compiles a click node into a single click step', () => {
+    const g = graph(
+      [
+        { id: 'p', type: 'profile', position: pos, data: { profileId: 'prof-1' } },
+        { id: 'c', type: 'click', position: pos, data: { selector: 'button.submit' } },
+      ],
+      [{ id: 'e1', source: 'p', target: 'c' }],
+    );
+    expect(resolveChains(g)).toEqual([
+      { profileId: 'prof-1', steps: [{ type: 'click', selector: 'button.submit' }] },
+    ]);
+  });
+
+  it('throws when a click node has an empty selector', () => {
+    const g = graph(
+      [
+        { id: 'p', type: 'profile', position: pos, data: { profileId: 'prof-1' } },
+        { id: 'c', type: 'click', position: pos, data: { selector: '   ' } },
+      ],
+      [{ id: 'e1', source: 'p', target: 'c' }],
+    );
+    expect(() => resolveChains(g)).toThrow(/selector/i);
+  });
+
   it('throws on a cycle', () => {
     const g = graph(
       [

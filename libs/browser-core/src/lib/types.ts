@@ -77,6 +77,8 @@ export type ResolvedFlowStep =
   | { type: 'wait'; ms: number }
   | { type: 'agent'; task: AgentTask; limits: AgentLimits; transcriptPath?: string }
   | { type: 'screenshot'; screenshotPath: string }
+  | { type: 'fill'; selector: string; value: string }
+  | { type: 'click'; selector: string }
   | { type: 'wallet'; privateKey: string; chains: WalletChainConfig[]; activeChainId: number };
 
 export interface RunFlowOptions {
@@ -120,6 +122,16 @@ export type FlowStepResult =
       status: 'completed' | 'failed';
       error: string | null;
       screenshotPath?: string | null;
+    }
+  | {
+      type: 'fill';
+      status: 'completed' | 'failed';
+      error: null | string;
+    }
+  | {
+      type: 'click';
+      status: 'completed' | 'failed';
+      error: null | string;
     }
   | {
       type: 'wallet';

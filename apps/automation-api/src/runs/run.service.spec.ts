@@ -261,6 +261,38 @@ describe('RunService.executeFlow', () => {
     expect(await lock.isLocked(resolve(dataRoot, 'profiles', profile.id))).toBe(false);
   });
 
+  it('forwards a fill step to runFlow unchanged', async () => {
+    const profile = await profiles.create({ label: 'p-fill' });
+    const browser = {
+      runFlow: jest.fn().mockResolvedValue({ results: [
+        { type: 'fill', status: 'completed', error: null },
+      ] }),
+    };
+    const svc = service(browser);
+
+    await svc.executeFlow(profile.id, [
+      { type: 'fill', selector: '#email', value: 'hi@example.com' },
+    ]);
+
+    const resolved = browser.runFlow.mock.calls[0][1];
+    expect(resolved).toEqual([{ type: 'fill', selector: '#email', value: 'hi@example.com' }]);
+  });
+
+  it('forwards a click step to runFlow unchanged', async () => {
+    const profile = await profiles.create({ label: 'p-click' });
+    const browser = {
+      runFlow: jest.fn().mockResolvedValue({ results: [
+        { type: 'click', status: 'completed', error: null },
+      ] }),
+    };
+    const svc = service(browser);
+
+    await svc.executeFlow(profile.id, [{ type: 'click', selector: 'button.submit' }]);
+
+    const resolved = browser.runFlow.mock.calls[0][1];
+    expect(resolved).toEqual([{ type: 'click', selector: 'button.submit' }]);
+  });
+
   it('forwards a wallet step to runFlow unchanged', async () => {
     const profile = await profiles.create({ label: 'p-wallet' });
     const browser = {

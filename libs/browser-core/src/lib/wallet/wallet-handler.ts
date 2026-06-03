@@ -107,6 +107,12 @@ export class WalletHandler {
         this.chains.set(chainId, { chainId, rpcUrl, name: p.chainName ?? `chain-${chainId}` });
         return null;
       }
+      // Reown/AppKit + wagmi sometimes gate connect on these. Grant eth_accounts unconditionally.
+      case 'wallet_requestPermissions':
+      case 'wallet_getPermissions':
+        return [{ parentCapability: 'eth_accounts', caveats: [] }];
+      case 'wallet_revokePermissions':
+        return null;
       default: {
         if (READ_PASSTHROUGH.has(req.method)) {
           const chain = this.activeChain();

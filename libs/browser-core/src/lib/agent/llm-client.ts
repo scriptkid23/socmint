@@ -32,7 +32,12 @@ IMPORTANT rules for typing and search:
 - If an input/textarea already shows the text you intended to enter (check its value="..."), do NOT type it again. Move on (usually pressEnter to submit a search).
 - To run a search: type the query into the search box once, then on the next step use pressEnter. Do not repeat the same type action.
 - After submitting, read the results from the DOM and use extract/finish to return them. Never repeat an identical action more than twice.
-- If "Recent steps" shows you already typed the same text, do NOT type again — use pressEnter or click next.`;
+- If "Recent steps" shows you already typed the same text, do NOT type again — use pressEnter or click next.
+
+Finishing a task (applies to ALL tasks):
+- A task may have several ordered steps. Do each step once, in order. Check "Recent steps" and never repeat a step that already succeeded.
+- As soon as the final step's effect is visible on the page, use finish with {"completed": true, "summary": "<what you did>"}.
+- If the page is no longer changing and there is nothing left in the task to do, call finish — do NOT keep clicking, scrolling, or re-issuing the same action just to fill steps.`;
 
 export interface LlmClientConfig {
   provider: AgentProvider;

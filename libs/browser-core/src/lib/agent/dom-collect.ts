@@ -21,9 +21,13 @@ export const COLLECT_VISIBLE_ELEMENTS = `
       const role = el.getAttribute('role');
       const isSearchRole = role && searchRoles.indexOf(role) >= 0;
       if (!text && !isField && !isEditable && !isSearchRole) continue;
-      const key = el.tagName + (role || '') + text;
-      if (seen.has(key)) continue;
-      seen.add(key);
+      // Never dedupe form fields: two empty inputs share the same tag+text key,
+      // which would drop the real target (e.g. a quantity box) from the list.
+      if (!isField && !isEditable && !isSearchRole) {
+        const key = el.tagName + (role || '') + text;
+        if (seen.has(key)) continue;
+        seen.add(key);
+      }
       visible.push(el);
     }
     return visible;

@@ -166,6 +166,12 @@ export class RunService {
           activeChainId: step.activeChainId,
         };
       }
+      if (step.type === 'fill') {
+        return { type: 'fill', selector: step.selector, value: step.value };
+      }
+      if (step.type === 'click') {
+        return { type: 'click', selector: step.selector };
+      }
       return { type: 'goto', url: step.url, waitUntil: step.waitUntil, timeoutMs: step.timeoutMs };
     });
 

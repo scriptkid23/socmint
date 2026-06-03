@@ -117,4 +117,14 @@ describe('WalletHandler', () => {
     const h = build();
     await expect(h.handle({ method: 'eth_sign', params: [] })).rejects.toMatchObject({ code: 4200 });
   });
+
+  it('grants eth_accounts permission for Reown/wagmi connect gating', async () => {
+    const h = build();
+    const granted = [{ parentCapability: 'eth_accounts', caveats: [] }];
+    expect(
+      await h.handle({ method: 'wallet_requestPermissions', params: [{ eth_accounts: {} }] }),
+    ).toEqual(granted);
+    expect(await h.handle({ method: 'wallet_getPermissions', params: [] })).toEqual(granted);
+    expect(await h.handle({ method: 'wallet_revokePermissions', params: [{ eth_accounts: {} }] })).toBeNull();
+  });
 });

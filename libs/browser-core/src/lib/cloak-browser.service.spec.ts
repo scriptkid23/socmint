@@ -325,6 +325,8 @@ describe('CloakBrowserService.runFlow', () => {
       async screenshot() {},
       async click() {},
       async type() {},
+      async fill() {},
+      async clickSelector() {},
       async pressEnter() {},
       async scroll() {},
       async readDom() {
@@ -408,8 +410,7 @@ describe('CloakBrowserService.runFlow', () => {
     expect(isClosed()).toBe(true);
   });
 
-  it('sets up the wallet provider via exposeFunction + addInitScript', async () => {
-    const exposed: Record<string, (arg: unknown) => unknown> = {};
+  it('injects the in-page wallet provider via addInitScript before navigation', async () => {
     const initScripts: string[] = [];
     const page = {
       async goto() {},
@@ -434,9 +435,7 @@ describe('CloakBrowserService.runFlow', () => {
       async addInitScript(s: string) {
         initScripts.push(s);
       },
-      async exposeFunction(name: string, cb: (arg: unknown) => unknown) {
-        exposed[name] = cb;
-      },
+      async exposeFunction() {},
     };
     const launcher: BrowserLauncher = {
       async ensureBinary() {},
@@ -446,26 +445,193 @@ describe('CloakBrowserService.runFlow', () => {
     };
     const svc = new CloakBrowserService(launcher);
 
+    const privateKey = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
     const { results } = await svc.runFlow(launch, [
       {
         type: 'wallet',
-        privateKey: '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
+        privateKey,
         chains: [{ chainId: 1, rpcUrl: 'https://eth.example', name: 'Ethereum' }],
         activeChainId: 1,
       },
     ]);
 
     expect(results[0]).toMatchObject({ type: 'wallet', status: 'completed', error: null });
-    expect(Object.keys(exposed)).toContain('__cloakWalletRequest');
     expect(initScripts).toHaveLength(1);
+    // The self-contained in-page bundle carries the wallet config (key + chain).
+    expect(initScripts[0]).toContain('__CLOAK_WALLET_CONFIG__');
+    expect(initScripts[0]).toContain(privateKey);
+  });
 
-    // The exposed binding routes through the handler and returns the address envelope.
-    const envelope = (await exposed['__cloakWalletRequest']({
-      method: 'eth_requestAccounts',
-      params: [],
-    })) as { ok: boolean; result: string[] };
-    expect(envelope.ok).toBe(true);
-    expect(envelope.result[0]).toBe('0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266');
+  it('fills an input by selector via an in-page evaluate', async () => {
+    const evals: string[] = [];
+    const page = {
+      async goto() {},
+      async title() {
+        return 'T';
+      },
+      url() {
+        return 'https://form.example/';
+      },
+      async evaluate(expr: string) {
+        evals.push(expr);
+      },
+      async screenshot() {},
+      on() {},
+    } as unknown as PageLike;
+    const launcher: BrowserLauncher = {
+      async ensureBinary() {},
+      async launchPersistentContext() {
+        return {
+          async newPage() {
+            return page;
+          },
+          pages() {
+            return [page];
+          },
+          on() {},
+          async close() {},
+          async addInitScript() {},
+          async exposeFunction() {},
+        } as BrowserContextLike;
+      },
+    };
+    const svc = new CloakBrowserService(launcher);
+
+    const { results } = await svc.runFlow(launch, [
+      { type: 'fill', selector: '#email', value: 'hi@example.com' },
+    ]);
+
+    expect(results[0]).toMatchObject({ type: 'fill', status: 'completed', error: null });
+    expect(evals).toHaveLength(1);
+    expect(evals[0]).toContain('"#email"');
+    expect(evals[0]).toContain('"hi@example.com"');
+  });
+
+  it('marks a fill step failed when the selector cannot be evaluated', async () => {
+    const page = {
+      async goto() {},
+      async title() {
+        return 'T';
+      },
+      url() {
+        return 'https://form.example/';
+      },
+      async evaluate() {
+        throw new Error('No element matches selector: #missing');
+      },
+      async screenshot() {},
+      on() {},
+    } as unknown as PageLike;
+    const launcher: BrowserLauncher = {
+      async ensureBinary() {},
+      async launchPersistentContext() {
+        return {
+          async newPage() {
+            return page;
+          },
+          pages() {
+            return [page];
+          },
+          on() {},
+          async close() {},
+          async addInitScript() {},
+          async exposeFunction() {},
+        } as BrowserContextLike;
+      },
+    };
+    const svc = new CloakBrowserService(launcher);
+
+    const { results } = await svc.runFlow(launch, [
+      { type: 'fill', selector: '#missing', value: 'x' },
+    ]);
+
+    expect(results[0]).toMatchObject({ type: 'fill', status: 'failed' });
+    expect(results[0].error).toMatch(/selector/i);
+  });
+
+  it('clicks an element by selector via an in-page evaluate', async () => {
+    const evals: string[] = [];
+    const page = {
+      async goto() {},
+      async title() {
+        return 'T';
+      },
+      url() {
+        return 'https://app.example/';
+      },
+      async evaluate(expr: string) {
+        evals.push(expr);
+      },
+      async screenshot() {},
+      on() {},
+    } as unknown as PageLike;
+    const launcher: BrowserLauncher = {
+      async ensureBinary() {},
+      async launchPersistentContext() {
+        return {
+          async newPage() {
+            return page;
+          },
+          pages() {
+            return [page];
+          },
+          on() {},
+          async close() {},
+          async addInitScript() {},
+          async exposeFunction() {},
+        } as BrowserContextLike;
+      },
+    };
+    const svc = new CloakBrowserService(launcher);
+
+    const { results } = await svc.runFlow(launch, [
+      { type: 'click', selector: 'button.submit' },
+    ]);
+
+    expect(results[0]).toMatchObject({ type: 'click', status: 'completed', error: null });
+    expect(evals.some((e) => e.includes('"button.submit"'))).toBe(true);
+  });
+
+  it('marks a click step failed when the selector cannot be evaluated', async () => {
+    const page = {
+      async goto() {},
+      async title() {
+        return 'T';
+      },
+      url() {
+        return 'https://app.example/';
+      },
+      async evaluate() {
+        throw new Error('No element matches selector: #missing');
+      },
+      async screenshot() {},
+      on() {},
+    } as unknown as PageLike;
+    const launcher: BrowserLauncher = {
+      async ensureBinary() {},
+      async launchPersistentContext() {
+        return {
+          async newPage() {
+            return page;
+          },
+          pages() {
+            return [page];
+          },
+          on() {},
+          async close() {},
+          async addInitScript() {},
+          async exposeFunction() {},
+        } as BrowserContextLike;
+      },
+    };
+    const svc = new CloakBrowserService(launcher);
+
+    const { results } = await svc.runFlow(launch, [
+      { type: 'click', selector: '#missing' },
+    ]);
+
+    expect(results[0]).toMatchObject({ type: 'click', status: 'failed' });
+    expect(results[0].error).toMatch(/selector/i);
   });
 
   it('keeps browser open for recording when requested', async () => {

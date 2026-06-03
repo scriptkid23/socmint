@@ -1,22 +1,22 @@
-import { WALLET_BINDING_NAME, buildWalletInitScript } from './provider-injection';
+import { buildWalletInitScript } from './provider-injection';
+import type { WalletProviderConfig } from './wallet.types';
 
 describe('buildWalletInitScript', () => {
-  const script = buildWalletInitScript('0xAbc0000000000000000000000000000000000001', '0x1');
+  const config: WalletProviderConfig = {
+    privateKey: '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d',
+    chains: [{ chainId: 84532, rpcUrl: 'https://base-sepolia-rpc.publicnode.com', name: 'Base Sepolia' }],
+    activeChainId: 84532,
+  };
+  const script = buildWalletInitScript(config);
 
-  it('embeds the binding name and address/chain', () => {
-    expect(script).toContain(WALLET_BINDING_NAME);
-    expect(script).toContain('0xAbc0000000000000000000000000000000000001');
-    expect(script).toContain('"0x1"');
+  it('embeds the wallet config (key + active chain) for the in-page provider', () => {
+    expect(script).toContain('__CLOAK_WALLET_CONFIG__');
+    expect(script).toContain(config.privateKey);
+    expect(script).toContain('84532');
   });
 
-  it('defines window.ethereum, isMetaMask, and EIP-6963 announce', () => {
-    expect(script).toContain('window.ethereum');
-    expect(script).toContain('isMetaMask');
+  it('includes the bundled provider that installs window.ethereum + EIP-6963', () => {
     expect(script).toContain('eip6963:announceProvider');
-  });
-
-  it('unwraps the envelope and rethrows provider errors with a code', () => {
-    expect(script).toContain('.ok');
-    expect(script).toContain('.code');
+    expect(script).toContain('__cloakWalletInstalled');
   });
 });

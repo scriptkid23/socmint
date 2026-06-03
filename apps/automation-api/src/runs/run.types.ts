@@ -36,10 +36,12 @@ export type FlowStep =
       chains: { chainId: number; rpcUrl: string; name: string }[];
       activeChainId: number;
     }
+  | { type: 'fill'; selector: string; value: string }
+  | { type: 'click'; selector: string }
   | { type: 'screenshot' };
 
 export interface FlowStepRecord {
-  type: 'goto' | 'wait' | 'agent' | 'screenshot' | 'wallet';
+  type: 'goto' | 'wait' | 'agent' | 'screenshot' | 'wallet' | 'fill' | 'click';
   status: 'completed' | 'failed';
   error: string | null;
   /** goto only */

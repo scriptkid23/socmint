@@ -68,6 +68,13 @@ export interface MetaMaskNodeData {
   chains: ChainConfig[];
   activeChainId: number;
 }
+export interface FillNodeData {
+  selector: string;
+  value: string;
+}
+export interface ClickNodeData {
+  selector: string;
+}
 
 export type BoardNodeData =
   | ProfileNodeData
@@ -76,11 +83,13 @@ export type BoardNodeData =
   | AgentNodeData
   | RecordNodeData
   | MetaMaskNodeData
+  | FillNodeData
+  | ClickNodeData
   | Record<string, never>;
 
 export interface BoardNode {
   id: string;
-  type: 'profile' | 'goto' | 'wait' | 'agent' | 'screenshot' | 'record' | 'metamask';
+  type: 'profile' | 'goto' | 'wait' | 'agent' | 'screenshot' | 'record' | 'metamask' | 'fill' | 'click';
   position: { x: number; y: number };
   data: BoardNodeData;
 }

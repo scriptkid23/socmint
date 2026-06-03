@@ -6,6 +6,8 @@ import {
   type BoardNode,
   type BoardNodeData,
   type ChainConfig,
+  type ClickNodeData,
+  type FillNodeData,
   type GotoNodeData,
   type MetaMaskNodeData,
   type Profile,
@@ -21,6 +23,8 @@ import { AgentNode } from './agent-node';
 import { ScreenshotNode } from './screenshot-node';
 import { RecordNode } from './record-node';
 import { MetaMaskNode } from './metamask-node';
+import { FillNode } from './fill-node';
+import { ClickNode } from './click-node';
 
 export const DEFAULT_WAIT_MS = 3000;
 const DEFAULT_OLLAMA_BASE_URL = 'http://127.0.0.1:11434';
@@ -286,6 +290,44 @@ export const NODE_DESCRIPTORS: NodeRegistry = {
       return errors;
     },
   },
+
+  fill: {
+    label: 'Fill',
+    component: FillNode,
+    defaultData: () => ({ selector: '', value: '' }),
+    serialize: (d) => ({
+      selector: (d.selector as string) ?? '',
+      value: (d.value as string) ?? '',
+    }),
+    inject: (d, ctx) => ({
+      selector: (d.selector as string) ?? '',
+      value: (d.value as string) ?? '',
+      onChange: (patch: Record<string, unknown>) => ctx.patch(patch),
+    }),
+    validate: (node) => {
+      const d = node.data as FillNodeData;
+      return !d.selector?.trim()
+        ? [{ nodeId: node.id, message: 'Fill selector is empty' }]
+        : [];
+    },
+  },
+
+  click: {
+    label: 'Click',
+    component: ClickNode,
+    defaultData: () => ({ selector: '' }),
+    serialize: (d) => ({ selector: (d.selector as string) ?? '' }),
+    inject: (d, ctx) => ({
+      selector: (d.selector as string) ?? '',
+      onChange: (patch: Record<string, unknown>) => ctx.patch(patch),
+    }),
+    validate: (node) => {
+      const d = node.data as ClickNodeData;
+      return !d.selector?.trim()
+        ? [{ nodeId: node.id, message: 'Click selector is empty' }]
+        : [];
+    },
+  },
 };
 
 /** Toolbar / add-button order. */
@@ -294,6 +336,8 @@ export const NODE_ORDER: NodeType[] = [
   'goto',
   'wait',
   'agent',
+  'fill',
+  'click',
   'screenshot',
   'record',
   'metamask',

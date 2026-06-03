@@ -91,6 +91,10 @@ export interface PageActions {
   screenshot(opts: { path: string; fullPage: boolean }): Promise<unknown>;
   click(index: number): Promise<void>;
   type(index: number, text: string): Promise<void>;
+  /** Set the value of a specific input/textarea/contenteditable by CSS selector. */
+  fill(selector: string, value: string): Promise<void>;
+  /** Click a specific element by CSS selector. */
+  clickSelector(selector: string): Promise<void>;
   pressEnter(): Promise<void>;
   scroll(direction: 'up' | 'down'): Promise<void>;
   readDom(): Promise<DomElement[]>;

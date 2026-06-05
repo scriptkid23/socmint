@@ -11,6 +11,7 @@ export function BoardList({
   onCreate,
   onDelete,
   onRename,
+  embedded = false,
 }: {
   boards: Board[];
   selectedId: string | null;
@@ -18,6 +19,8 @@ export function BoardList({
   onCreate: () => void;
   onDelete: (id: string) => void;
   onRename: (id: string, name: string) => void;
+  /** When true, omit outer aside chrome (used inside AutomationSidebar). */
+  embedded?: boolean;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
@@ -42,11 +45,11 @@ export function BoardList({
 
   const cancel = () => setEditingId(null);
 
-  return (
-    <aside className="flex w-56 shrink-0 flex-col border-r-2 border-foreground">
-      <div className="flex items-center justify-between border-b-2 border-foreground px-4 py-3">
+  const list = (
+    <>
+      <div className="flex items-center justify-between border-b border-border-light px-4 py-3">
         <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-          Boards
+          {boards.length} board{boards.length === 1 ? '' : 's'}
         </span>
         <Button onClick={onCreate} className="text-xs">
           + New
@@ -129,6 +132,16 @@ export function BoardList({
           </li>
         ))}
       </ul>
+    </>
+  );
+
+  if (embedded) {
+    return <div className="flex min-h-0 flex-1 flex-col">{list}</div>;
+  }
+
+  return (
+    <aside className="flex w-56 shrink-0 flex-col border-r-2 border-foreground">
+      {list}
     </aside>
   );
 }

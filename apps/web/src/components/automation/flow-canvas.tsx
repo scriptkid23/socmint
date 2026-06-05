@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import {
   ReactFlow,
   Background,
@@ -22,8 +22,6 @@ import {
 } from '../../api/client';
 import { validateGraph } from './graph-validation';
 import {
-  NODE_DESCRIPTORS,
-  NODE_ORDER,
   type NodeRuntimeContext,
   type NodeType,
   defaultNodeData,
@@ -69,7 +67,14 @@ function chainEndsWithRecord(profileNodeId: string, nodes: Node[], edges: Edge[]
   return lastType === 'record';
 }
 
-export function FlowCanvas({ board, profiles }: { board: Board; profiles: Profile[] }) {
+export interface FlowCanvasHandle {
+  addNode: (type: NodeType) => void;
+}
+
+export const FlowCanvas = forwardRef<
+  FlowCanvasHandle,
+  { board: Board; profiles: Profile[] }
+>(function FlowCanvas({ board, profiles }, ref) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const nodesRef = useRef<Node[]>([]);
@@ -265,14 +270,19 @@ export function FlowCanvas({ board, profiles }: { board: Board; profiles: Profil
     [setEdges],
   );
 
-  const addNode = (type: NodeType) => {
-    const id = newId(type);
-    const position = { x: 80 + Math.random() * 240, y: 80 + Math.random() * 240 };
-    setNodes((ns) => [
-      ...ns,
-      { id, type, position, data: injectNode(type, defaultNodeData(type), id) },
-    ]);
-  };
+  const addNode = useCallback(
+    (type: NodeType) => {
+      const id = newId(type);
+      const position = { x: 80 + Math.random() * 240, y: 80 + Math.random() * 240 };
+      setNodes((ns) => [
+        ...ns,
+        { id, type, position, data: injectNode(type, defaultNodeData(type), id) },
+      ]);
+    },
+    [injectNode, setNodes],
+  );
+
+  useImperativeHandle(ref, () => ({ addNode }), [addNode]);
 
   useEffect(() => {
     if (!hydrated.current) return;
@@ -325,20 +335,16 @@ export function FlowCanvas({ board, profiles }: { board: Board; profiles: Profil
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex shrink-0 items-center gap-2 border-b-2 border-foreground px-4 py-3">
-        {NODE_ORDER.map((type) => (
-          <Button key={type} onClick={() => addNode(type)} className="gap-1 text-xs">
-            + {NODE_DESCRIPTORS[type].label}
-          </Button>
-        ))}
-        <div className="ml-auto flex items-center gap-3">
-          <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-            {saving ? 'Saving…' : 'Saved'}
-          </span>
-          <Button onClick={run} disabled={running} className="text-xs">
-            {running ? 'Running…' : 'Run'}
-          </Button>
-        </div>
+      <div className="flex shrink-0 items-center justify-end gap-3 border-b-2 border-foreground px-4 py-3">
+        <span className="mr-auto truncate font-mono text-xs uppercase tracking-widest">
+          {board.name}
+        </span>
+        <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          {saving ? 'Saving…' : 'Saved'}
+        </span>
+        <Button onClick={run} disabled={running} className="text-xs">
+          {running ? 'Running…' : 'Run'}
+        </Button>
       </div>
 
       {errorMsg && (
@@ -392,4 +398,4 @@ export function FlowCanvas({ board, profiles }: { board: Board; profiles: Profil
       )}
     </div>
   );
-}
+});

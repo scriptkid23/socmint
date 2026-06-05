@@ -1,15 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api, type Board } from '../../api/client';
 import { useBoards } from '../../hooks/use-boards';
 import { useProfiles } from '../../hooks/use-profiles';
-import { BoardList } from './board-list';
-import { FlowCanvas } from './flow-canvas';
+import { AutomationSidebar } from './automation-sidebar';
+import { FlowCanvas, type FlowCanvasHandle } from './flow-canvas';
+import type { NodeType } from './nodes/registry';
 
 export function AutomationPage() {
   const { boards, create, remove, rename } = useBoards();
   const { profiles } = useProfiles();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [board, setBoard] = useState<Board | null>(null);
+  const canvasRef = useRef<FlowCanvasHandle>(null);
 
   useEffect(() => {
     if (!selectedId && boards.length > 0) setSelectedId(boards[0].id);
@@ -49,17 +51,19 @@ export function AutomationPage() {
         </div>
       </header>
       <div className="flex min-h-0 flex-1">
-        <BoardList
+        <AutomationSidebar
           boards={boards}
           selectedId={selectedId}
           onSelect={setSelectedId}
           onCreate={handleCreate}
           onDelete={handleDelete}
           onRename={handleRename}
+          onAddNode={(type: NodeType) => canvasRef.current?.addNode(type)}
+          nodesDisabled={!board}
         />
         <div className="min-h-0 min-w-0 flex-1">
           {board ? (
-            <FlowCanvas key={board.id} board={board} profiles={profiles} />
+            <FlowCanvas key={board.id} ref={canvasRef} board={board} profiles={profiles} />
           ) : (
             <div className="flex h-full items-center justify-center font-mono text-xs uppercase tracking-widest text-muted-foreground">
               Select or create a board

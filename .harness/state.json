@@ -1,0 +1,101 @@
+{
+  "config": {
+    "name": "socmint",
+    "description": "Nx monorepo: CloakBrowser profile automation, flow boards, AI agent nodes, and wallet injection.",
+    "hardConstraints": [
+      "No real network calls in unit tests",
+      "Any DB schema change must go through a migration"
+    ]
+  },
+  "features": [
+    {
+      "id": "automation-flow-board",
+      "behavior": "Visual React Flow board to compose profile -> goto -> wait -> screenshot chains and run them in parallel across CloakBrowser profiles.",
+      "verification": "pnpm test && pnpm build",
+      "state": "not_started"
+    },
+    {
+      "id": "ai-agent-browser-node",
+      "behavior": "AI Agent board node that runs a DOM-based LLM observe->decide->act loop on the profile browser session and returns structured JSON.",
+      "verification": "pnpm exec nx test browser-core && pnpm exec nx test automation-api",
+      "state": "not_started"
+    },
+    {
+      "id": "metamask-wallet-node",
+      "behavior": "MetaMask board node that injects a synthetic EIP-1193 wallet (window.ethereum) with Node-side signing via viem for automated dApp interactions.",
+      "verification": "pnpm exec nx test browser-core && pnpm exec nx test automation-api && pnpm exec nx test web",
+      "state": "not_started"
+    },
+    {
+      "id": "cloakbrowser-profile-automation",
+      "behavior": "CloakBrowser profile lifecycle: create, interactive login session capture, headless/headed runs, artifacts, and run audit logging.",
+      "verification": "pnpm exec nx test automation-api",
+      "state": "not_started"
+    },
+    {
+      "id": "cloakbrowser-ui-interactive-login",
+      "behavior": "Web UI for profile management with interactive CloakBrowser login sessions, session persistence, and profile table actions.",
+      "verification": "pnpm exec nx test web",
+      "state": "not_started"
+    },
+    {
+      "id": "profiles-table-layout",
+      "behavior": "Profiles page table layout with create/login/delete actions and consistent navigation shell.",
+      "verification": "pnpm exec nx test web",
+      "state": "not_started"
+    },
+    {
+      "id": "perf-step-execution",
+      "behavior": "Automation step chains and verification run measurably faster with same outputs",
+      "verification": "pnpm test && pnpm build",
+      "state": "passing",
+      "evidence": "pnpm test: PASS - automation-api 84 passed (4 skipped), web 23 passed; nx test browser-core 77/77. pnpm build PASS. Perf fixes: nav probe 400ms/1s (was 8s waitForNavigation per click), goto domcontentloaded default, DOM_SETTLE only on type/scroll, flow screenshot viewport-only. Decision perf-nav-probe recorded."
+    },
+    {
+      "id": "record-node-replay",
+      "behavior": "Record node toggles Record (live capture via Run board) and Replay (edit saved steps, then full playback of goto/click/fill/scroll).",
+      "verification": "pnpm exec nx test browser-core && pnpm exec nx test automation-api && pnpm exec nx test web",
+      "state": "passing",
+      "evidence": "Verification 2026-06-05: nx test browser-core 77/77 pass (added scroll FlowStep test); nx test automation-api 84 pass/4 skipped (new recorded-steps-to-flow.spec + resolve-chains replay tests); nx test web 23/23 pass. Lint clean on record-node.tsx, registry.ts, flow-canvas.tsx. Implements: scroll FlowStep (browser-core + run.types/run.service), pure compileRecordedSteps(), RecordNodeData.mode? (default record), replay branch in node-registry, replay validation (empty selector), web UI mode toggle + inline editable replay steps."
+    }
+  ],
+  "progress": {
+    "testStatus": "PASS - nx test browser-core 77/77, automation-api 84 (4 skipped), web 23/23",
+    "updatedAt": "2026-06-05T15:46:00Z",
+    "completed": [
+      "record-node-replay passing",
+      "perf-step-execution passing (restored)",
+      "Decisions perf-nav-probe + record-replay-mode-on-node"
+    ],
+    "inProgress": [],
+    "blocked": [],
+    "nextSteps": [
+      "Manual UI verify replay edit (100 -> 10) then Run",
+      "Commit record/replay + perf changes",
+      "Activate one dormant feature next session"
+    ]
+  },
+  "decisions": [
+    {
+      "id": "perf-nav-probe",
+      "date": "2026-06-05",
+      "title": "Short navigation probe after click instead of 8s waitForNavigation",
+      "rationale": "Same-page clicks were blocking ~8s per agent step because waitForNavigation always timed out. Now probe 400ms (1000ms for Enter); full domcontentloaded settle only when URL/navigation actually changes.",
+      "rejected": "Keep 8s waitForNavigation on every click - simple but adds ~8s latency per same-page interaction; rejected for agent loops."
+    },
+    {
+      "id": "record-replay-mode-on-node",
+      "date": "2026-06-05",
+      "title": "Record/Replay as a mode toggle on the existing Record node (not a new node type)",
+      "rationale": "Reuse captured RecordedStep[] in place. mode?: 'record'|'replay' (optional, defaults 'record') keeps old boards valid. Replay compiles steps via shared pure compileRecordedSteps() into goto/click/fill/scroll FlowSteps with settle waits; record mode keeps the browser open for capture as before. Editing happens inline in the node so users can change e.g. input 100 -> 10.",
+      "rejected": "Separate 'Replay' node type - duplicates RecordedStep wiring, profile resolution, serialization, and forces copying steps between two nodes; rejected for redundancy and worse UX."
+    }
+  ],
+  "agents": [
+    {
+      "id": "builder",
+      "role": "implementer",
+      "instructions": "Write code + tests. Do not change architecture without harness_add_decision."
+    }
+  ]
+}

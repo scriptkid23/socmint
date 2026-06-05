@@ -1,6 +1,7 @@
 import { BoardGraphError } from './board.errors';
 import type { BoardNode } from './board.types';
 import type { FlowStep } from '../runs/run.types';
+import { compileRecordedSteps } from './recorded-steps-to-flow';
 
 type NodeOfType<T extends BoardNode['type']> = Extract<BoardNode, { type: T }>;
 
@@ -131,6 +132,10 @@ export const NODE_CHAIN_REGISTRY: ChainRegistry = {
 
   record: {
     toSteps(node) {
+      const mode = node.data.mode ?? 'record';
+      if (mode === 'replay') {
+        return { steps: compileRecordedSteps(node.data.steps ?? [], node.id) };
+      }
       const steps: FlowStep[] = [];
       for (const s of node.data.steps ?? []) {
         if (s.type === 'navigate' && s.url?.trim() && !s.url.startsWith('about:')) {

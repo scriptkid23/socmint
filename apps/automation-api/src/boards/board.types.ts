@@ -49,7 +49,11 @@ export type RecordedStep =
     }
   | { type: 'scroll'; direction: 'up' | 'down'; at: string };
 
+export type RecordNodeMode = 'record' | 'replay';
+
 export interface RecordNodeData {
+  /** Optional for backward-compat with boards saved before replay mode; missing → 'record'. */
+  mode?: RecordNodeMode;
   steps: RecordedStep[];
 }
 

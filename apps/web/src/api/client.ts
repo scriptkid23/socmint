@@ -54,7 +54,10 @@ export type RecordedStep =
     }
   | { type: 'scroll'; direction: 'up' | 'down'; at: string };
 
+export type RecordNodeMode = 'record' | 'replay';
+
 export interface RecordNodeData {
+  mode?: RecordNodeMode;
   steps: RecordedStep[];
 }
 

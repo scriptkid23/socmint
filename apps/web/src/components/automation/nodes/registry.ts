@@ -13,6 +13,8 @@ import {
   type Profile,
   type ProfileNodeData,
   type RecordedStep,
+  type RecordNodeData,
+  type RecordNodeMode,
   type WaitNodeData,
   type WaitUntil,
 } from '../../../api/client';
@@ -212,14 +214,20 @@ export const NODE_DESCRIPTORS: NodeRegistry = {
   record: {
     label: 'Record',
     component: RecordNode,
-    defaultData: () => ({ steps: [], recording: false }),
-    serialize: (d) => ({ steps: (d.steps as RecordedStep[]) ?? [] }),
+    defaultData: () => ({ mode: 'record', steps: [], recording: false }),
+    serialize: (d) => ({
+      mode: (d.mode as RecordNodeMode) ?? 'record',
+      steps: (d.steps as RecordedStep[]) ?? [],
+    }),
     inject: (d, ctx) => {
       const profileId = resolveUpstreamProfile(ctx.id, ctx.getNodes(), ctx.getEdges());
       return {
+        mode: (d.mode as RecordNodeMode) ?? 'record',
         steps: (d.steps as RecordedStep[]) ?? [],
         profileId,
         recording: Boolean(d.recording),
+        onSetMode: (mode: RecordNodeMode) => ctx.patch({ mode }),
+        onChangeSteps: (steps: RecordedStep[]) => ctx.patch({ steps }),
         onStart: async () => {
           if (!profileId) return;
           await api.startRecording(profileId);
@@ -245,6 +253,17 @@ export const NODE_DESCRIPTORS: NodeRegistry = {
           ctx.generateGotoChain(ctx.id, steps);
         },
       };
+    },
+    validate: (node) => {
+      const d = node.data as RecordNodeData;
+      if ((d.mode ?? 'record') !== 'replay') return [];
+      const errors: GraphError[] = [];
+      (d.steps ?? []).forEach((s, i) => {
+        if ((s.type === 'click' || s.type === 'type') && !s.selector?.trim()) {
+          errors.push({ nodeId: node.id, message: `Replay step ${i + 1} (${s.type}) has an empty selector` });
+        }
+      });
+      return errors;
     },
   },
 

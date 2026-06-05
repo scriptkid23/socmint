@@ -172,6 +172,9 @@ export class RunService {
       if (step.type === 'click') {
         return { type: 'click', selector: step.selector };
       }
+      if (step.type === 'scroll') {
+        return { type: 'scroll', direction: step.direction };
+      }
       return { type: 'goto', url: step.url, waitUntil: step.waitUntil, timeoutMs: step.timeoutMs };
     });
 

@@ -283,6 +283,7 @@ export function FlowCanvas({ board, profiles }: { board: Board; profiles: Profil
         const profileNodes = ns.filter((n) => n.type === 'profile');
         return ns.map((n) => {
           if (n.type !== 'record') return n;
+          if (((n.data as { mode?: string }).mode ?? 'record') !== 'record') return n;
           const profileNode = profileNodes.find((p) => {
             const pid = (p.data as { profileId?: string | null }).profileId;
             return pid && resolveUpstreamProfile(n.id, ns, edges) === pid;

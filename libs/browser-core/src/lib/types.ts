@@ -79,6 +79,7 @@ export type ResolvedFlowStep =
   | { type: 'screenshot'; screenshotPath: string }
   | { type: 'fill'; selector: string; value: string }
   | { type: 'click'; selector: string }
+  | { type: 'scroll'; direction: 'up' | 'down' }
   | { type: 'wallet'; privateKey: string; chains: WalletChainConfig[]; activeChainId: number };
 
 export interface RunFlowOptions {
@@ -130,6 +131,11 @@ export type FlowStepResult =
     }
   | {
       type: 'click';
+      status: 'completed' | 'failed';
+      error: null | string;
+    }
+  | {
+      type: 'scroll';
       status: 'completed' | 'failed';
       error: null | string;
     }

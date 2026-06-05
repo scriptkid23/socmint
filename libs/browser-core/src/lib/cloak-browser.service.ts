@@ -144,6 +144,9 @@ export class CloakBrowserService {
           } else if (step.type === 'click') {
             await page.clickSelector(step.selector);
             results.push({ type: 'click', status: 'completed', error: null });
+          } else if (step.type === 'scroll') {
+            await page.scroll(step.direction);
+            results.push({ type: 'scroll', status: 'completed', error: null });
           } else if (step.type === 'screenshot') {
             await page.screenshot({ path: step.screenshotPath, fullPage: false });
             results.push({
@@ -182,6 +185,8 @@ export class CloakBrowserService {
             results.push({ type: 'fill', ...base });
           } else if (step.type === 'click') {
             results.push({ type: 'click', ...base });
+          } else if (step.type === 'scroll') {
+            results.push({ type: 'scroll', ...base });
           } else if (step.type === 'screenshot') {
             results.push({ type: 'screenshot', ...base, screenshotPath: null });
           }

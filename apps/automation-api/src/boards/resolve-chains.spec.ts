@@ -186,6 +186,59 @@ describe('resolveChains', () => {
     ]);
   });
 
+  it('replays a record node into full goto/click/fill/scroll steps without keeping open', () => {
+    const g = graph(
+      [
+        { id: 'p', type: 'profile', position: pos, data: { profileId: 'prof-1' } },
+        {
+          id: 'r',
+          type: 'record',
+          position: pos,
+          data: {
+            mode: 'replay',
+            steps: [
+              { type: 'navigate', url: 'https://example.com/', at: 't1' },
+              { type: 'click', tag: 'a', text: 'x', href: null, selector: 'a.next', at: 't2' },
+              { type: 'type', tag: 'input', text: 'qty', selector: '#qty', value: '10', at: 't3' },
+              { type: 'scroll', direction: 'down', at: 't4' },
+            ],
+          },
+        },
+      ],
+      [{ id: 'e1', source: 'p', target: 'r' }],
+    );
+    const jobs = resolveChains(g);
+    expect(jobs[0].endsWithRecord).toBeUndefined();
+    expect(jobs[0].steps).toEqual([
+      { type: 'goto', url: 'https://example.com/' },
+      { type: 'wait', ms: 300 },
+      { type: 'click', selector: 'a.next' },
+      { type: 'wait', ms: 150 },
+      { type: 'fill', selector: '#qty', value: '10' },
+      { type: 'wait', ms: 150 },
+      { type: 'scroll', direction: 'down' },
+    ]);
+  });
+
+  it('throws when a replay record node has an empty selector', () => {
+    const g = graph(
+      [
+        { id: 'p', type: 'profile', position: pos, data: { profileId: 'prof-1' } },
+        {
+          id: 'r',
+          type: 'record',
+          position: pos,
+          data: {
+            mode: 'replay',
+            steps: [{ type: 'click', tag: 'a', text: '', href: null, selector: '', at: 't1' }],
+          },
+        },
+      ],
+      [{ id: 'e1', source: 'p', target: 'r' }],
+    );
+    expect(() => resolveChains(g)).toThrow(/empty selector/i);
+  });
+
   it('allows all domains by default so agent can open search result pages', () => {
     const g = graph(
       [

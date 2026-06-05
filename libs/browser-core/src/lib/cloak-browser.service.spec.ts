@@ -592,6 +592,47 @@ describe('CloakBrowserService.runFlow', () => {
     expect(evals.some((e) => e.includes('"button.submit"'))).toBe(true);
   });
 
+  it('scrolls the page via an in-page evaluate during runFlow', async () => {
+    const evals: string[] = [];
+    const page = {
+      async goto() {},
+      async title() {
+        return 'T';
+      },
+      url() {
+        return 'https://app.example/';
+      },
+      async evaluate(expr: string) {
+        evals.push(expr);
+      },
+      async screenshot() {},
+      on() {},
+    } as unknown as PageLike;
+    const launcher: BrowserLauncher = {
+      async ensureBinary() {},
+      async launchPersistentContext() {
+        return {
+          async newPage() {
+            return page;
+          },
+          pages() {
+            return [page];
+          },
+          on() {},
+          async close() {},
+          async addInitScript() {},
+          async exposeFunction() {},
+        } as BrowserContextLike;
+      },
+    };
+    const svc = new CloakBrowserService(launcher);
+
+    const { results } = await svc.runFlow(launch, [{ type: 'scroll', direction: 'down' }]);
+
+    expect(results[0]).toMatchObject({ type: 'scroll', status: 'completed', error: null });
+    expect(evals.some((e) => e.includes('"down"'))).toBe(true);
+  });
+
   it('marks a click step failed when the selector cannot be evaluated', async () => {
     const page = {
       async goto() {},

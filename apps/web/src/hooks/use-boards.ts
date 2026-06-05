@@ -34,9 +34,18 @@ export function useBoards() {
     [refresh],
   );
 
+  const rename = useCallback(
+    async (id: string, name: string) => {
+      const updated = await api.updateBoard(id, { name });
+      await refresh();
+      return updated;
+    },
+    [refresh],
+  );
+
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
-  return { boards, error, refresh, create, remove };
+  return { boards, error, refresh, create, remove, rename };
 }

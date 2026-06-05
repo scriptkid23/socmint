@@ -6,7 +6,7 @@ import { BoardList } from './board-list';
 import { FlowCanvas } from './flow-canvas';
 
 export function AutomationPage() {
-  const { boards, create, remove } = useBoards();
+  const { boards, create, remove, rename } = useBoards();
   const { profiles } = useProfiles();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [board, setBoard] = useState<Board | null>(null);
@@ -33,6 +33,11 @@ export function AutomationPage() {
     if (id === selectedId) setSelectedId(null);
   };
 
+  const handleRename = async (id: string, name: string) => {
+    const updated = await rename(id, name);
+    if (id === selectedId) setBoard((prev) => (prev ? { ...prev, name: updated.name } : prev));
+  };
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="flex shrink-0 items-center gap-4 border-b-2 border-foreground px-8 py-6 lg:px-10">
@@ -50,6 +55,7 @@ export function AutomationPage() {
           onSelect={setSelectedId}
           onCreate={handleCreate}
           onDelete={handleDelete}
+          onRename={handleRename}
         />
         <div className="min-h-0 min-w-0 flex-1">
           {board ? (

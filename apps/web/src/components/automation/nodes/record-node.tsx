@@ -4,14 +4,18 @@ import type { RecordedStep, RecordNodeMode } from '../../../api/client';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 
+const DEFAULT_REPLAY_DELAY_MS = 500;
+
 export interface RecordNodeProps extends NodeProps {
   data: {
     mode?: RecordNodeMode;
     steps: RecordedStep[];
     profileId: string | null;
     recording: boolean;
+    replayDelayMs?: number;
     onSetMode?: (mode: RecordNodeMode) => void;
     onChangeSteps?: (steps: RecordedStep[]) => void;
+    onChangeDelay?: (ms: number) => void;
     onStart?: () => void;
     onStop?: () => void;
     onClear?: () => void;
@@ -188,11 +192,28 @@ function ReplayMode({ data, steps }: { data: RecordNodeProps['data']; steps: Rec
       </p>
     );
   }
+  const delayMs = data.replayDelayMs ?? DEFAULT_REPLAY_DELAY_MS;
+  const delaySeconds = (delayMs / 1000).toString();
   return (
     <>
       <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
         {steps.length} steps · editable
       </p>
+      <label className="nodrag flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+        <span className="shrink-0">Delay/step (s)</span>
+        <Input
+          type="number"
+          min="0"
+          step="0.1"
+          className="h-6 w-16 px-1 text-[10px]"
+          value={delaySeconds}
+          onChange={(e) => {
+            const seconds = Number(e.target.value);
+            if (!Number.isFinite(seconds) || seconds < 0) return;
+            data.onChangeDelay?.(Math.round(seconds * 1000));
+          }}
+        />
+      </label>
       <div className="nodrag max-h-48 space-y-1 overflow-auto">
         {steps.map((s, i) => (
           <ReplayStepRow

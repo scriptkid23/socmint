@@ -29,7 +29,15 @@ import { FillNode } from './fill-node';
 import { ClickNode } from './click-node';
 
 export const DEFAULT_WAIT_MS = 3000;
+/** Default per-step delay (ms) inserted between replayed record steps. */
+export const DEFAULT_REPLAY_DELAY_MS = 500;
 const DEFAULT_OLLAMA_BASE_URL = 'http://127.0.0.1:11434';
+
+/** Clamp a record node's replay delay to a non-negative integer (ms), default 500. */
+function normalizeReplayDelay(value: unknown): number {
+  const ms = Number(value);
+  return Number.isFinite(ms) && ms >= 0 ? Math.round(ms) : DEFAULT_REPLAY_DELAY_MS;
+}
 const DEFAULT_METAMASK_CHAINS: ChainConfig[] = [
   { chainId: 1, rpcUrl: 'https://eth.llamarpc.com', name: 'Ethereum' },
 ];
@@ -214,20 +222,28 @@ export const NODE_DESCRIPTORS: NodeRegistry = {
   record: {
     label: 'Record',
     component: RecordNode,
-    defaultData: () => ({ mode: 'record', steps: [], recording: false }),
+    defaultData: () => ({
+      mode: 'record',
+      steps: [],
+      recording: false,
+      replayDelayMs: DEFAULT_REPLAY_DELAY_MS,
+    }),
     serialize: (d) => ({
       mode: (d.mode as RecordNodeMode) ?? 'record',
       steps: (d.steps as RecordedStep[]) ?? [],
+      replayDelayMs: normalizeReplayDelay(d.replayDelayMs),
     }),
     inject: (d, ctx) => {
       const profileId = resolveUpstreamProfile(ctx.id, ctx.getNodes(), ctx.getEdges());
       return {
         mode: (d.mode as RecordNodeMode) ?? 'record',
         steps: (d.steps as RecordedStep[]) ?? [],
+        replayDelayMs: normalizeReplayDelay(d.replayDelayMs),
         profileId,
         recording: Boolean(d.recording),
         onSetMode: (mode: RecordNodeMode) => ctx.patch({ mode }),
         onChangeSteps: (steps: RecordedStep[]) => ctx.patch({ steps }),
+        onChangeDelay: (replayDelayMs: number) => ctx.patch({ replayDelayMs }),
         onStart: async () => {
           if (!profileId) return;
           await api.startRecording(profileId);

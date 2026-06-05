@@ -55,6 +55,8 @@ export interface RecordNodeData {
   /** Optional for backward-compat with boards saved before replay mode; missing → 'record'. */
   mode?: RecordNodeMode;
   steps: RecordedStep[];
+  /** Replay-only: delay inserted after each step (ms). Missing → 500. */
+  replayDelayMs?: number;
 }
 
 export interface ChainConfig {

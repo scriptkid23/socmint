@@ -134,7 +134,9 @@ export const NODE_CHAIN_REGISTRY: ChainRegistry = {
     toSteps(node) {
       const mode = node.data.mode ?? 'record';
       if (mode === 'replay') {
-        return { steps: compileRecordedSteps(node.data.steps ?? [], node.id) };
+        return {
+          steps: compileRecordedSteps(node.data.steps ?? [], node.id, node.data.replayDelayMs),
+        };
       }
       const steps: FlowStep[] = [];
       for (const s of node.data.steps ?? []) {

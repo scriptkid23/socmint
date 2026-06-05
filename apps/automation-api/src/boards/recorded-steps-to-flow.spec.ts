@@ -2,7 +2,7 @@ import { compileRecordedSteps } from './recorded-steps-to-flow';
 import { BoardGraphError } from './board.errors';
 
 describe('compileRecordedSteps', () => {
-  it('compiles navigate, click, type, scroll', () => {
+  it('compiles navigate, click, type, scroll with the default 500ms delay', () => {
     expect(
       compileRecordedSteps([
         { type: 'navigate', url: 'https://example.com', at: 't1' },
@@ -12,13 +12,37 @@ describe('compileRecordedSteps', () => {
       ]),
     ).toEqual([
       { type: 'goto', url: 'https://example.com' },
-      { type: 'wait', ms: 300 },
+      { type: 'wait', ms: 500 },
       { type: 'click', selector: 'button.go' },
-      { type: 'wait', ms: 150 },
+      { type: 'wait', ms: 500 },
       { type: 'fill', selector: '#qty', value: '10' },
-      { type: 'wait', ms: 150 },
+      { type: 'wait', ms: 500 },
       { type: 'scroll', direction: 'down' },
+      { type: 'wait', ms: 500 },
     ]);
+  });
+
+  it('honors a custom per-step delay', () => {
+    expect(
+      compileRecordedSteps(
+        [{ type: 'click', tag: 'button', text: 'Go', href: null, selector: 'button.go', at: 't1' }],
+        'record',
+        1200,
+      ),
+    ).toEqual([
+      { type: 'click', selector: 'button.go' },
+      { type: 'wait', ms: 1200 },
+    ]);
+  });
+
+  it('omits pacing waits when the delay is 0', () => {
+    expect(
+      compileRecordedSteps(
+        [{ type: 'click', tag: 'button', text: 'Go', href: null, selector: 'button.go', at: 't1' }],
+        'record',
+        0,
+      ),
+    ).toEqual([{ type: 'click', selector: 'button.go' }]);
   });
 
   it('skips about: navigates', () => {
@@ -32,7 +56,7 @@ describe('compileRecordedSteps', () => {
       ]),
     ).toEqual([
       { type: 'fill', selector: '#q', value: '' },
-      { type: 'wait', ms: 150 },
+      { type: 'wait', ms: 500 },
     ]);
   });
 

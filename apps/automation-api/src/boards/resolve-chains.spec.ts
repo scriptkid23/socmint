@@ -211,12 +211,39 @@ describe('resolveChains', () => {
     expect(jobs[0].endsWithRecord).toBeUndefined();
     expect(jobs[0].steps).toEqual([
       { type: 'goto', url: 'https://example.com/' },
-      { type: 'wait', ms: 300 },
+      { type: 'wait', ms: 500 },
       { type: 'click', selector: 'a.next' },
-      { type: 'wait', ms: 150 },
+      { type: 'wait', ms: 500 },
       { type: 'fill', selector: '#qty', value: '10' },
-      { type: 'wait', ms: 150 },
+      { type: 'wait', ms: 500 },
       { type: 'scroll', direction: 'down' },
+      { type: 'wait', ms: 500 },
+    ]);
+  });
+
+  it('replays with a custom per-step delay from the record node', () => {
+    const g = graph(
+      [
+        { id: 'p', type: 'profile', position: pos, data: { profileId: 'prof-1' } },
+        {
+          id: 'r',
+          type: 'record',
+          position: pos,
+          data: {
+            mode: 'replay',
+            replayDelayMs: 1000,
+            steps: [
+              { type: 'click', tag: 'a', text: 'x', href: null, selector: 'a.next', at: 't1' },
+            ],
+          },
+        },
+      ],
+      [{ id: 'e1', source: 'p', target: 'r' }],
+    );
+    const jobs = resolveChains(g);
+    expect(jobs[0].steps).toEqual([
+      { type: 'click', selector: 'a.next' },
+      { type: 'wait', ms: 1000 },
     ]);
   });
 

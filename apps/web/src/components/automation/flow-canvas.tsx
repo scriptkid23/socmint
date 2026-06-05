@@ -12,6 +12,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import {
+  ApiError,
   api,
   type Board,
   type BoardGraph,
@@ -74,6 +75,8 @@ export function FlowCanvas({ board, profiles }: { board: Board; profiles: Profil
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hydrated = useRef(false);
+  // Consecutive getRecording failures per record node (transient-error tolerance).
+  const recordPollFailures = useRef<Map<string, number>>(new Map());
 
   const persistBoardNow = useCallback(
     async (nodesSnapshot: Node[]) => {
@@ -205,28 +208,42 @@ export function FlowCanvas({ board, profiles }: { board: Board; profiles: Profil
     );
     if (recording.length === 0) return;
 
+    const finalize = async (nodeId: string, profileId: string) => {
+      // Session ended server-side (browser closed): pull cached/orphaned steps.
+      try {
+        const { steps } = await api.stopRecording(profileId);
+        patchNodeData(nodeId, { steps, recording: false });
+        if (steps.length > 0) {
+          const nextNodes = nodesRef.current.map((node) =>
+            node.id === nodeId ? { ...node, data: { ...node.data, steps, recording: false } } : node,
+          );
+          await persistBoardNow(nextNodes);
+        }
+      } catch {
+        patchNodeData(nodeId, { recording: false });
+      }
+    };
+
     const poll = async () => {
       for (const n of recording) {
         const profileId = (n.data as { profileId?: string | null }).profileId;
         if (!profileId) continue;
         try {
           const status = await api.getRecording(profileId);
+          recordPollFailures.current.delete(n.id);
           patchNodeData(n.id, { steps: status.steps });
-        } catch {
-          try {
-            const { steps } = await api.stopRecording(profileId);
-            patchNodeData(n.id, { steps, recording: false });
-            if (steps.length > 0) {
-              const nextNodes = nodesRef.current.map((node) =>
-                node.id === n.id ? { ...node, data: { ...node.data, steps, recording: false } } : node,
-              );
-              await persistBoardNow(nextNodes);
-            } else {
-              patchNodeData(n.id, { recording: false });
-            }
-          } catch {
-            patchNodeData(n.id, { recording: false });
+        } catch (err) {
+          // Only a definitive 404 means the recording session is truly gone
+          // (user closed the browser). Transient errors (network blip, dev
+          // server reload, 5xx) must NOT kill a still-live session.
+          if (err instanceof ApiError && err.status === 404) {
+            recordPollFailures.current.delete(n.id);
+            await finalize(n.id, profileId);
+            continue;
           }
+          const fails = (recordPollFailures.current.get(n.id) ?? 0) + 1;
+          recordPollFailures.current.set(n.id, fails);
+          // Tolerate brief outages; keep polling without touching the session.
         }
       }
     };

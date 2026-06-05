@@ -19,7 +19,7 @@ import type {
   RunPageResult,
 } from './types';
 
-const DEFAULT_WAIT_UNTIL = 'load';
+const DEFAULT_WAIT_UNTIL = 'domcontentloaded';
 const DEFAULT_TIMEOUT_MS = 60000;
 
 /**
@@ -145,7 +145,7 @@ export class CloakBrowserService {
             await page.clickSelector(step.selector);
             results.push({ type: 'click', status: 'completed', error: null });
           } else if (step.type === 'screenshot') {
-            await page.screenshot({ path: step.screenshotPath, fullPage: true });
+            await page.screenshot({ path: step.screenshotPath, fullPage: false });
             results.push({
               type: 'screenshot',
               status: 'completed',

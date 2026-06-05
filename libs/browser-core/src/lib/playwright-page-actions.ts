@@ -9,8 +9,11 @@ import {
   TYPE_BY_INDEX_FN,
 } from './playwright-browser-scripts';
 
-const SETTLE_TIMEOUT_MS = 15000;
-const NAV_WAIT_MS = 8000;
+const SETTLE_TIMEOUT_MS = 8000;
+/** Short probe for clicks — same-page clicks must not block for multi-second nav timeouts. */
+const NAV_PROBE_MS = 400;
+/** Enter/submit often starts navigation slightly later than a bare click. */
+const NAV_PROBE_ENTER_MS = 1000;
 const EVALUATE_MAX_ATTEMPTS = 3;
 
 function evaluateInPage(
@@ -39,22 +42,59 @@ export function isContextDestroyed(err: unknown): boolean {
   );
 }
 
-/** Let any in-flight navigation settle so the next page.evaluate has a live context. */
-async function settle(page: Page): Promise<void> {
-  for (const state of ['domcontentloaded', 'load'] as const) {
-    try {
-      await page.waitForLoadState(state, { timeout: SETTLE_TIMEOUT_MS });
-    } catch {
-      // page may already be at this state or navigation may have been aborted
-    }
+/** Wait for DOM ready after a real navigation (skipped for same-page interactions). */
+async function settleAfterNavigation(page: Page): Promise<void> {
+  try {
+    await page.waitForLoadState('domcontentloaded', { timeout: SETTLE_TIMEOUT_MS });
+  } catch {
+    // page may already be loaded
   }
 }
 
-async function waitForPossibleNavigation(page: Page): Promise<void> {
-  try {
-    await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: NAV_WAIT_MS });
-  } catch {
-    // no navigation (e.g. click on a button that stays on the same page)
+/**
+ * Returns true when the click/keypress triggered navigation. Uses a short probe
+ * so same-page clicks return in ~400ms instead of waiting the full nav timeout.
+ */
+async function probeNavigation(
+  page: Page,
+  urlBefore: string,
+  probeMs: number,
+): Promise<boolean> {
+  const waiters: Array<Promise<boolean>> = [];
+  if (typeof page.waitForNavigation === 'function') {
+    waiters.push(
+      page
+        .waitForNavigation({ waitUntil: 'domcontentloaded', timeout: probeMs })
+        .then(() => true)
+        .catch(() => false),
+    );
+  }
+  if (typeof page.waitForURL === 'function') {
+    waiters.push(
+      page
+        .waitForURL((u) => u.toString() !== urlBefore, { timeout: probeMs })
+        .then(() => true)
+        .catch(() => false),
+    );
+  }
+  if (waiters.length === 0) {
+    return page.url() !== urlBefore;
+  }
+  const probe = Promise.race(waiters);
+  const raced = await Promise.race([
+    probe,
+    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), probeMs)),
+  ]);
+  return raced || page.url() !== urlBefore;
+}
+
+async function afterInteraction(
+  page: Page,
+  urlBefore: string,
+  probeMs = NAV_PROBE_MS,
+): Promise<void> {
+  if (await probeNavigation(page, urlBefore, probeMs)) {
+    await settleAfterNavigation(page);
   }
 }
 
@@ -71,7 +111,7 @@ export async function evaluateWithRetry<T>(
     } catch (err) {
       lastErr = err;
       if (!isContextDestroyed(err) || attempt >= maxAttempts - 1) throw err;
-      await settle(page);
+      await settleAfterNavigation(page);
     }
   }
   throw lastErr;
@@ -96,9 +136,9 @@ export function wrapPlaywrightPage(raw: unknown): PageActions {
       });
     },
     async click(index: number) {
+      const urlBefore = page.url();
       await evaluateWithRetry(page, () => evaluateInPage(page, CLICK_BY_INDEX_FN, index));
-      await waitForPossibleNavigation(page);
-      await settle(page);
+      await afterInteraction(page, urlBefore);
     },
     async type(index: number, text: string) {
       await evaluateWithRetry(page, () => evaluateInPage(page, TYPE_BY_INDEX_FN, index, text));
@@ -107,14 +147,14 @@ export function wrapPlaywrightPage(raw: unknown): PageActions {
       await evaluateWithRetry(page, () => evaluateInPage(page, FILL_BY_SELECTOR_FN, selector, value));
     },
     async clickSelector(selector: string) {
+      const urlBefore = page.url();
       await evaluateWithRetry(page, () => evaluateInPage(page, CLICK_BY_SELECTOR_FN, selector));
-      await waitForPossibleNavigation(page);
-      await settle(page);
+      await afterInteraction(page, urlBefore);
     },
     async pressEnter() {
+      const urlBefore = page.url();
       await page.keyboard.press('Enter');
-      await waitForPossibleNavigation(page);
-      await settle(page);
+      await afterInteraction(page, urlBefore, NAV_PROBE_ENTER_MS);
     },
     async scroll(direction: 'up' | 'down') {
       await evaluateWithRetry(page, () => evaluateInPage(page, SCROLL_FN, direction));

@@ -43,6 +43,29 @@ describe('evaluateWithRetry', () => {
 });
 
 describe('wrapPlaywrightPage', () => {
+  it('does not wait for long navigation timeout on same-page clicks', async () => {
+    jest.useFakeTimers();
+    try {
+      const page = {
+        evaluate: jest.fn().mockResolvedValue(undefined),
+        url: jest.fn().mockReturnValue('https://example.com'),
+        waitForNavigation: jest.fn().mockImplementation(
+          () => new Promise((_resolve, reject) => setTimeout(() => reject(new Error('timeout')), 10_000)),
+        ),
+        waitForURL: jest.fn().mockRejectedValue(new Error('timeout')),
+        waitForLoadState: jest.fn().mockResolvedValue(undefined),
+        isClosed: () => false,
+      };
+      const actions = wrapPlaywrightPage(page);
+      const clickPromise = actions.click(0);
+      await jest.advanceTimersByTimeAsync(500);
+      await clickPromise;
+      expect(page.waitForLoadState).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('retries readDom when evaluate fails due to navigation', async () => {
     let evaluateCalls = 0;
     const page = {

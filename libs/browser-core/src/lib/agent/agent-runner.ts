@@ -2,8 +2,8 @@ import { formatDomForPrompt, parseAgentDecision } from './dom-serializer';
 import { AGENT_SYSTEM_PROMPT } from './llm-client';
 import { STATE_CHANGING, pageSignature } from './task-completion';
 
-/** Delay so the DOM can reflect the effect of a state-changing action. */
-const DOM_SETTLE_MS = 500;
+/** Delay so typed text appears in the DOM before the next readDom (clicks settle in PageActions). */
+const DOM_SETTLE_MS = 200;
 /** Consecutive unchanged observations (after acting) that mean "task settled". */
 const NO_PROGRESS_LIMIT = 3;
 import type {
@@ -359,7 +359,10 @@ export async function runAgent(
 
       if (STATE_CHANGING.has(decision.action.type)) {
         effectiveActions++;
-        await new Promise((r) => setTimeout(r, DOM_SETTLE_MS));
+        // click/pressEnter already probe navigation in PageActions; only type/scroll need a short DOM tick
+        if (decision.action.type === 'type' || decision.action.type === 'scroll') {
+          await new Promise((r) => setTimeout(r, DOM_SETTLE_MS));
+        }
       }
     } catch (e) {
       // The browser/window is gone — unrecoverable.

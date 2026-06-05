@@ -96,7 +96,7 @@ describe('CloakBrowserService.runPage', () => {
     });
     expect(page.gotoArgs).toEqual([
       'https://example.com',
-      { waitUntil: 'load', timeout: 60000 },
+      { waitUntil: 'domcontentloaded', timeout: 60000 },
     ]);
   });
 

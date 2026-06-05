@@ -1,0 +1,28 @@
+---
+description: Harness MCP lifecycle — context, WIP=1 features, evidence-based passing, handoff
+alwaysApply: true
+---
+
+# Harness MCP Workflow
+
+This repo uses the **harness** MCP server. Follow this lifecycle; do not skip steps.
+
+## Session lifecycle
+
+1. **`harness_get_context`** — call at session start (read config, features, progress, decisions, agents).
+2. **`harness_update_feature` (state: `active`)** — activate **exactly ONE** feature at a time (WIP=1).
+3. **`harness_update_progress`** — update as work moves (completed, inProgress, blocked, nextSteps).
+4. **`harness_add_decision`** — record any performance or architecture trade-off, including rejected options.
+5. **`harness_set_feature_passing`** — only after running the feature's `verification` command and capturing evidence.
+6. **`harness_handoff`** — call at session end; leave no feature in `active` state.
+
+## Rules
+
+- **Respect `hardConstraints`** in harness config. If a request violates them, stop and ask before proceeding.
+- **Never mark passing without evidence** — attach test output, benchmark log, or other concrete proof.
+- **Prefer measurable speedups** — baseline → change → re-measure → record evidence.
+- **Minimize scope** — optimize the execution path of existing steps first; do not rewrite unrelated code.
+
+## Builder agent
+
+When implementing, follow the `builder` agent instructions: write code + tests; do not change architecture without `harness_add_decision`.

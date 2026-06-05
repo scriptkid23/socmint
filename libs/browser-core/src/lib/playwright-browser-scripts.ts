@@ -143,7 +143,7 @@ const SELECTOR_RESOLVER = `
         const el = __cloakResolveTarget(selector);
         if (el) return resolve(el);
         if (Date.now() >= deadline) return resolve(null);
-        setTimeout(tick, 100);
+        setTimeout(tick, 50);
       };
       tick();
     });
@@ -152,7 +152,7 @@ const SELECTOR_RESOLVER = `
 
 export const CLICK_BY_SELECTOR_FN = `(async function (selector) {
 ${SELECTOR_RESOLVER}
-  const el = await __cloakWaitFor(selector, 5000);
+  const el = await __cloakWaitFor(selector, 2500);
   if (!el) throw new Error('No element matches selector: ' + selector);
   if (el.scrollIntoView) el.scrollIntoView({ block: 'center' });
   el.click();
@@ -160,7 +160,7 @@ ${SELECTOR_RESOLVER}
 
 export const FILL_BY_SELECTOR_FN = `(async function (selector, text) {
 ${SELECTOR_RESOLVER}
-  const el = await __cloakWaitFor(selector, 5000);
+  const el = await __cloakWaitFor(selector, 2500);
   if (!el) throw new Error('No element matches selector: ' + selector);
   if (el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA' && !el.isContentEditable) {
     throw new Error('Element is not an input/textarea/contenteditable: ' + el.tagName);

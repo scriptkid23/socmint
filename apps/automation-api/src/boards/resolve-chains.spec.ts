@@ -247,6 +247,54 @@ describe('resolveChains', () => {
     ]);
   });
 
+  it('compiles an If node with true/false branch subgraphs and stops the main chain', () => {
+    const g = graph(
+      [
+        { id: 'p', type: 'profile', position: pos, data: { profileId: 'prof-1' } },
+        { id: 'g', type: 'goto', position: pos, data: { url: 'https://example.com' } },
+        { id: 'i', type: 'if', position: pos, data: { selector: '#login', condition: 'exists' } },
+        { id: 'c', type: 'click', position: pos, data: { selector: '#go' } },
+        { id: 'w', type: 'wait', position: pos, data: { ms: 500 } },
+        { id: 's', type: 'script', position: pos, data: { code: 'alert("done")' } },
+      ],
+      [
+        { id: 'e1', source: 'p', target: 'g' },
+        { id: 'e2', source: 'g', target: 'i' },
+        { id: 'e3', source: 'i', target: 'c', sourceHandle: 'true' },
+        { id: 'e4', source: 'i', target: 'w', sourceHandle: 'false' },
+        { id: 'e5', source: 's', target: 'g' },
+      ],
+    );
+    const jobs = resolveChains(g);
+    expect(jobs[0].steps).toEqual([
+      { type: 'goto', url: 'https://example.com' },
+      {
+        type: 'if',
+        selector: '#login',
+        condition: 'exists',
+        thenSteps: [{ type: 'click', selector: '#go' }],
+        elseSteps: [{ type: 'wait', ms: 500 }],
+      },
+    ]);
+  });
+
+  it('throws when an If node reuses the same branch handle', () => {
+    const g = graph(
+      [
+        { id: 'p', type: 'profile', position: pos, data: { profileId: 'prof-1' } },
+        { id: 'i', type: 'if', position: pos, data: { selector: '#x', condition: 'exists' } },
+        { id: 'a', type: 'goto', position: pos, data: { url: 'https://a' } },
+        { id: 'b', type: 'goto', position: pos, data: { url: 'https://b' } },
+      ],
+      [
+        { id: 'e1', source: 'p', target: 'i' },
+        { id: 'e2', source: 'i', target: 'a', sourceHandle: 'true' },
+        { id: 'e3', source: 'i', target: 'b', sourceHandle: 'true' },
+      ],
+    );
+    expect(() => resolveChains(g)).toThrow(/duplicate branch handles/i);
+  });
+
   it('throws when a replay record node has an empty selector', () => {
     const g = graph(
       [

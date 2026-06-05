@@ -329,6 +329,10 @@ describe('CloakBrowserService.runFlow', () => {
       async clickSelector() {},
       async pressEnter() {},
       async scroll() {},
+      async selectorExists() {
+        return false;
+      },
+      async runScript() {},
       async readDom() {
         return [{ index: 0, tag: 'button', role: 'button', text: 'Go', href: null }];
       },
@@ -673,6 +677,154 @@ describe('CloakBrowserService.runFlow', () => {
 
     expect(results[0]).toMatchObject({ type: 'click', status: 'failed' });
     expect(results[0].error).toMatch(/selector/i);
+  });
+
+  it('runs the then branch when the selector exists', async () => {
+    const evals: string[] = [];
+    const page = {
+      async goto() {},
+      async title() {
+        return 'T';
+      },
+      url() {
+        return 'https://app.example/';
+      },
+      async evaluate(expr: string) {
+        evals.push(expr);
+        if (expr.includes('document.querySelector')) return true;
+        return undefined;
+      },
+      async screenshot() {},
+      on() {},
+    } as unknown as PageLike;
+    const launcher: BrowserLauncher = {
+      async ensureBinary() {},
+      async launchPersistentContext() {
+        return {
+          async newPage() {
+            return page;
+          },
+          pages() {
+            return [page];
+          },
+          on() {},
+          async close() {},
+          async addInitScript() {},
+          async exposeFunction() {},
+        } as BrowserContextLike;
+      },
+    };
+    const svc = new CloakBrowserService(launcher);
+
+    const { results } = await svc.runFlow(launch, [
+      {
+        type: 'if',
+        selector: '#ok',
+        condition: 'exists',
+        thenSteps: [{ type: 'click', selector: '#go' }],
+        elseSteps: [{ type: 'wait', ms: 1 }],
+      },
+    ]);
+
+    expect(results[0]).toMatchObject({ type: 'if', status: 'completed', branch: 'then' });
+    expect(results[1]).toMatchObject({ type: 'click', status: 'completed' });
+    expect(evals.some((e) => e.includes('"#go"'))).toBe(true);
+  });
+
+  it('runs the else branch when the selector is missing', async () => {
+    jest.useFakeTimers();
+    try {
+      const page = {
+        async goto() {},
+        async title() {
+          return 'T';
+        },
+        url() {
+          return 'https://app.example/';
+        },
+        async evaluate(expr: string) {
+          if (expr.includes('document.querySelector')) return false;
+          return undefined;
+        },
+        async screenshot() {},
+        on() {},
+      } as unknown as PageLike;
+      const launcher: BrowserLauncher = {
+        async ensureBinary() {},
+        async launchPersistentContext() {
+          return {
+            async newPage() {
+              return page;
+            },
+            pages() {
+              return [page];
+            },
+            on() {},
+            async close() {},
+            async addInitScript() {},
+            async exposeFunction() {},
+          } as BrowserContextLike;
+        },
+      };
+      const svc = new CloakBrowserService(launcher);
+      const run = svc.runFlow(launch, [
+        {
+          type: 'if',
+          selector: '#missing',
+          condition: 'exists',
+          thenSteps: [{ type: 'click', selector: '#go' }],
+          elseSteps: [{ type: 'wait', ms: 100 }],
+        },
+      ]);
+      await jest.advanceTimersByTimeAsync(100);
+      const { results } = await run;
+
+      expect(results[0]).toMatchObject({ type: 'if', status: 'completed', branch: 'else' });
+      expect(results[1]).toMatchObject({ type: 'wait', status: 'completed' });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('runs script steps in the page context', async () => {
+    const evals: string[] = [];
+    const page = {
+      async goto() {},
+      async title() {
+        return 'T';
+      },
+      url() {
+        return 'https://app.example/';
+      },
+      async evaluate(expr: string) {
+        evals.push(expr);
+      },
+      async screenshot() {},
+      on() {},
+    } as unknown as PageLike;
+    const launcher: BrowserLauncher = {
+      async ensureBinary() {},
+      async launchPersistentContext() {
+        return {
+          async newPage() {
+            return page;
+          },
+          pages() {
+            return [page];
+          },
+          on() {},
+          async close() {},
+          async addInitScript() {},
+          async exposeFunction() {},
+        } as BrowserContextLike;
+      },
+    };
+    const svc = new CloakBrowserService(launcher);
+
+    const { results } = await svc.runFlow(launch, [{ type: 'script', code: 'alert("hi")' }]);
+
+    expect(results[0]).toMatchObject({ type: 'script', status: 'completed' });
+    expect(evals.some((e) => e.includes('alert'))).toBe(true);
   });
 
   it('keeps browser open for recording when requested', async () => {

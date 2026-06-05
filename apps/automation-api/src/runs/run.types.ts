@@ -39,10 +39,28 @@ export type FlowStep =
   | { type: 'fill'; selector: string; value: string }
   | { type: 'click'; selector: string }
   | { type: 'scroll'; direction: 'up' | 'down' }
-  | { type: 'screenshot' };
+  | { type: 'screenshot' }
+  | {
+      type: 'if';
+      selector: string;
+      condition: 'exists' | 'not_exists';
+      thenSteps: FlowStep[];
+      elseSteps: FlowStep[];
+    }
+  | { type: 'script'; code: string };
 
 export interface FlowStepRecord {
-  type: 'goto' | 'wait' | 'agent' | 'screenshot' | 'wallet' | 'fill' | 'click' | 'scroll';
+  type:
+    | 'goto'
+    | 'wait'
+    | 'agent'
+    | 'screenshot'
+    | 'wallet'
+    | 'fill'
+    | 'click'
+    | 'scroll'
+    | 'if'
+    | 'script';
   status: 'completed' | 'failed';
   error: string | null;
   /** goto only */

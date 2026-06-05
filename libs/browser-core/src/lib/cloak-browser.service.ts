@@ -80,119 +80,133 @@ export class CloakBrowserService {
       const page = asPageActions(rawPage);
       const createLlm = deps?.createLlm ?? createLlmClient;
 
-      for (const step of steps) {
-        try {
-          throwIfAborted(isAborted);
-          if (step.type === 'goto') {
-            await page.goto(step.url, {
-              waitUntil: step.waitUntil ?? DEFAULT_WAIT_UNTIL,
-              timeout: step.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-            });
-            results.push({
-              type: 'goto',
-              status: 'completed',
-              error: null,
-              title: await page.title(),
-              finalUrl: page.url(),
-            });
-          } else if (step.type === 'wait') {
-            await sleepUntil(step.ms, isAborted);
-            results.push({
-              type: 'wait',
-              status: 'completed',
-              error: null,
-            });
-          } else if (step.type === 'agent') {
-            const llm = createLlm({
-              provider: step.task.provider,
-              model: step.task.model,
-              apiKey: step.task.apiKey,
-              baseUrl: step.task.baseUrl,
-            });
-            const agentResult = await runAgent(page, step.task, llm, step.limits);
-            if (step.transcriptPath) {
-              await writeFile(
-                step.transcriptPath,
-                JSON.stringify(redactTranscript(agentResult.transcript), null, 2),
-                'utf8',
-              );
-            }
-            results.push({
-              type: 'agent',
-              status: agentResult.status,
-              error: agentResult.error,
-              stepsUsed: agentResult.stepsUsed,
-              stopReason: agentResult.stopReason,
-              result: agentResult.result,
-              transcriptPath: step.transcriptPath ?? null,
-            });
-            if (agentResult.status === 'failed') break;
-          } else if (step.type === 'wallet') {
-            // cloakbrowser strips Playwright bindings, so the provider signs
-            // in-page (viem). Inject before any dApp navigation.
-            await context.addInitScript(
-              buildWalletInitScript({
-                privateKey: step.privateKey,
-                chains: step.chains,
-                activeChainId: step.activeChainId,
-              }),
-            );
-            results.push({ type: 'wallet', status: 'completed', error: null });
-          } else if (step.type === 'fill') {
-            await page.fill(step.selector, step.value);
-            results.push({ type: 'fill', status: 'completed', error: null });
-          } else if (step.type === 'click') {
-            await page.clickSelector(step.selector);
-            results.push({ type: 'click', status: 'completed', error: null });
-          } else if (step.type === 'scroll') {
-            await page.scroll(step.direction);
-            results.push({ type: 'scroll', status: 'completed', error: null });
-          } else if (step.type === 'screenshot') {
-            await page.screenshot({ path: step.screenshotPath, fullPage: false });
-            results.push({
-              type: 'screenshot',
-              status: 'completed',
-              error: null,
-              screenshotPath: step.screenshotPath,
-            });
-          }
-        } catch (err) {
-          const base = {
-            status: 'failed' as const,
-            error:
-              err instanceof BrowserClosedError
+      const failResult = (step: ResolvedFlowStep, err: unknown): FlowStepResult => {
+        const base = {
+          status: 'failed' as const,
+          error:
+            err instanceof BrowserClosedError
+              ? err.message
+              : err instanceof Error
                 ? err.message
-                : err instanceof Error
-                  ? err.message
-                  : String(err),
+                : String(err),
+        };
+        if (step.type === 'goto') return { type: 'goto', ...base };
+        if (step.type === 'wait') return { type: 'wait', ...base };
+        if (step.type === 'agent') {
+          return {
+            type: 'agent',
+            ...base,
+            stepsUsed: 0,
+            stopReason: 'error',
+            result: null,
+            transcriptPath: step.transcriptPath ?? null,
           };
-          if (step.type === 'goto') {
-            results.push({ type: 'goto', ...base });
-          } else if (step.type === 'wait') {
-            results.push({ type: 'wait', ...base });
-          } else if (step.type === 'agent') {
-            results.push({
-              type: 'agent',
-              ...base,
-              stepsUsed: 0,
-              stopReason: 'error',
-              result: null,
-              transcriptPath: step.transcriptPath ?? null,
-            });
-          } else if (step.type === 'wallet') {
-            results.push({ type: 'wallet', ...base });
-          } else if (step.type === 'fill') {
-            results.push({ type: 'fill', ...base });
-          } else if (step.type === 'click') {
-            results.push({ type: 'click', ...base });
-          } else if (step.type === 'scroll') {
-            results.push({ type: 'scroll', ...base });
-          } else if (step.type === 'screenshot') {
-            results.push({ type: 'screenshot', ...base, screenshotPath: null });
-          }
-          break;
         }
-      }
+        if (step.type === 'wallet') return { type: 'wallet', ...base };
+        if (step.type === 'fill') return { type: 'fill', ...base };
+        if (step.type === 'click') return { type: 'click', ...base };
+        if (step.type === 'scroll') return { type: 'scroll', ...base };
+        if (step.type === 'screenshot') return { type: 'screenshot', ...base, screenshotPath: null };
+        if (step.type === 'if') return { type: 'if', ...base, branch: 'then' };
+        return { type: 'script', ...base };
+      };
+
+      const executeAll = async (stepList: ResolvedFlowStep[]): Promise<boolean> => {
+        for (const step of stepList) {
+          try {
+            throwIfAborted(isAborted);
+            if (step.type === 'if') {
+              const exists = await page.selectorExists(step.selector);
+              const takeThen = step.condition === 'exists' ? exists : !exists;
+              results.push({
+                type: 'if',
+                status: 'completed',
+                error: null,
+                branch: takeThen ? 'then' : 'else',
+              });
+              const branch = takeThen ? step.thenSteps : step.elseSteps;
+              if (!(await executeAll(branch))) return false;
+              continue;
+            }
+            if (step.type === 'goto') {
+              await page.goto(step.url, {
+                waitUntil: step.waitUntil ?? DEFAULT_WAIT_UNTIL,
+                timeout: step.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+              });
+              results.push({
+                type: 'goto',
+                status: 'completed',
+                error: null,
+                title: await page.title(),
+                finalUrl: page.url(),
+              });
+            } else if (step.type === 'wait') {
+              await sleepUntil(step.ms, isAborted);
+              results.push({ type: 'wait', status: 'completed', error: null });
+            } else if (step.type === 'agent') {
+              const llm = createLlm({
+                provider: step.task.provider,
+                model: step.task.model,
+                apiKey: step.task.apiKey,
+                baseUrl: step.task.baseUrl,
+              });
+              const agentResult = await runAgent(page, step.task, llm, step.limits);
+              if (step.transcriptPath) {
+                await writeFile(
+                  step.transcriptPath,
+                  JSON.stringify(redactTranscript(agentResult.transcript), null, 2),
+                  'utf8',
+                );
+              }
+              results.push({
+                type: 'agent',
+                status: agentResult.status,
+                error: agentResult.error,
+                stepsUsed: agentResult.stepsUsed,
+                stopReason: agentResult.stopReason,
+                result: agentResult.result,
+                transcriptPath: step.transcriptPath ?? null,
+              });
+              if (agentResult.status === 'failed') return false;
+            } else if (step.type === 'wallet') {
+              await context.addInitScript(
+                buildWalletInitScript({
+                  privateKey: step.privateKey,
+                  chains: step.chains,
+                  activeChainId: step.activeChainId,
+                }),
+              );
+              results.push({ type: 'wallet', status: 'completed', error: null });
+            } else if (step.type === 'fill') {
+              await page.fill(step.selector, step.value);
+              results.push({ type: 'fill', status: 'completed', error: null });
+            } else if (step.type === 'click') {
+              await page.clickSelector(step.selector);
+              results.push({ type: 'click', status: 'completed', error: null });
+            } else if (step.type === 'scroll') {
+              await page.scroll(step.direction);
+              results.push({ type: 'scroll', status: 'completed', error: null });
+            } else if (step.type === 'script') {
+              await page.runScript(step.code);
+              results.push({ type: 'script', status: 'completed', error: null });
+            } else if (step.type === 'screenshot') {
+              await page.screenshot({ path: step.screenshotPath, fullPage: false });
+              results.push({
+                type: 'screenshot',
+                status: 'completed',
+                error: null,
+                screenshotPath: step.screenshotPath,
+              });
+            }
+          } catch (err) {
+            results.push(failResult(step, err));
+            return false;
+          }
+        }
+        return true;
+      };
+
+      await executeAll(steps);
 
       const failed = results.some((r) => r.status === 'failed');
       if (options?.keepOpenForRecording && !failed && !userClosed) {

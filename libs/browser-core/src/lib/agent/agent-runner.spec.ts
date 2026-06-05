@@ -25,6 +25,10 @@ class FakePage implements PageActions {
   async clickSelector() {}
   async pressEnter() {}
   async scroll() {}
+  async selectorExists() {
+    return false;
+  }
+  async runScript() {}
   async readDom() {
     return this.dom;
   }

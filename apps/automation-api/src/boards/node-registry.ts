@@ -201,4 +201,17 @@ export const NODE_CHAIN_REGISTRY: ChainRegistry = {
       return { steps: [{ type: 'click', selector }] };
     },
   },
+
+  // Branching is compiled in resolve-chains (subgraph walk); no leaf steps here.
+  if: {},
+
+  script: {
+    toSteps(node) {
+      const code = node.data.code ?? '';
+      if (!code.trim()) {
+        throw new BoardGraphError(`Script node ${node.id} has empty code`);
+      }
+      return { steps: [{ type: 'script', code }] };
+    },
+  },
 };

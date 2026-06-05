@@ -80,7 +80,15 @@ export type ResolvedFlowStep =
   | { type: 'fill'; selector: string; value: string }
   | { type: 'click'; selector: string }
   | { type: 'scroll'; direction: 'up' | 'down' }
-  | { type: 'wallet'; privateKey: string; chains: WalletChainConfig[]; activeChainId: number };
+  | { type: 'wallet'; privateKey: string; chains: WalletChainConfig[]; activeChainId: number }
+  | {
+      type: 'if';
+      selector: string;
+      condition: 'exists' | 'not_exists';
+      thenSteps: ResolvedFlowStep[];
+      elseSteps: ResolvedFlowStep[];
+    }
+  | { type: 'script'; code: string };
 
 export interface RunFlowOptions {
   /** When true, keep the browser open and attach a recorder after steps finish. */
@@ -143,4 +151,15 @@ export type FlowStepResult =
       type: 'wallet';
       status: 'completed' | 'failed';
       error: null | string;
+    }
+  | {
+      type: 'if';
+      status: 'completed' | 'failed';
+      error: string | null;
+      branch: 'then' | 'else';
+    }
+  | {
+      type: 'script';
+      status: 'completed' | 'failed';
+      error: string | null;
     };

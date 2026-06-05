@@ -182,3 +182,11 @@ ${SELECTOR_RESOLVER}
     el.dispatchEvent(new Event('input', { bubbles: true }));
   }
 })`;
+
+export const SELECTOR_EXISTS_FN = `(function (selector) {
+  return !!document.querySelector(selector);
+})`;
+
+export const RUN_SCRIPT_FN = `(function (code) {
+  eval(code);
+})`;

@@ -45,7 +45,14 @@ function toGraph(nodes: Node[], edges: Edge[]): BoardGraph {
       position: n.position,
       data: serializeNodeData(n.type, n.data as Record<string, unknown>),
     })),
-    edges: edges.map((e) => ({ id: e.id, source: e.source, target: e.target })),
+    edges: edges.map((e) => ({
+      id: e.id,
+      source: e.source,
+      target: e.target,
+      ...(e.sourceHandle === 'true' || e.sourceHandle === 'false'
+        ? { sourceHandle: e.sourceHandle }
+        : {}),
+    })),
   };
 }
 

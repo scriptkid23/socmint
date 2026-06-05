@@ -77,6 +77,17 @@ export interface ClickNodeData {
   selector: string;
 }
 
+export type IfCondition = 'exists' | 'not_exists';
+
+export interface IfNodeData {
+  selector: string;
+  condition: IfCondition;
+}
+
+export interface ScriptNodeData {
+  code: string;
+}
+
 interface NodeBase {
   id: string;
   position: { x: number; y: number };
@@ -91,12 +102,16 @@ export type BoardNode =
   | (NodeBase & { type: 'record'; data: RecordNodeData })
   | (NodeBase & { type: 'metamask'; data: MetaMaskNodeData })
   | (NodeBase & { type: 'fill'; data: FillNodeData })
-  | (NodeBase & { type: 'click'; data: ClickNodeData });
+  | (NodeBase & { type: 'click'; data: ClickNodeData })
+  | (NodeBase & { type: 'if'; data: IfNodeData })
+  | (NodeBase & { type: 'script'; data: ScriptNodeData });
 
 export interface BoardEdge {
   id: string;
   source: string;
   target: string;
+  /** Branch handle from an If node (`true` / `false`). Omitted on linear edges. */
+  sourceHandle?: 'true' | 'false';
 }
 
 export interface BoardGraph {

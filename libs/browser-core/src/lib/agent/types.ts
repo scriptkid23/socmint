@@ -97,6 +97,10 @@ export interface PageActions {
   clickSelector(selector: string): Promise<void>;
   pressEnter(): Promise<void>;
   scroll(direction: 'up' | 'down'): Promise<void>;
+  /** True when `document.querySelector(selector)` matches at least one element. */
+  selectorExists(selector: string): Promise<boolean>;
+  /** Run arbitrary JavaScript in the page context (e.g. alert, DOM tweaks). */
+  runScript(code: string): Promise<void>;
   readDom(): Promise<DomElement[]>;
   isClosed?(): boolean;
 }

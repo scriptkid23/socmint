@@ -5,7 +5,9 @@ import {
   CLICK_BY_INDEX_FN,
   CLICK_BY_SELECTOR_FN,
   FILL_BY_SELECTOR_FN,
+  RUN_SCRIPT_FN,
   SCROLL_FN,
+  SELECTOR_EXISTS_FN,
   TYPE_BY_INDEX_FN,
 } from './playwright-browser-scripts';
 
@@ -158,6 +160,15 @@ export function wrapPlaywrightPage(raw: unknown): PageActions {
     },
     async scroll(direction: 'up' | 'down') {
       await evaluateWithRetry(page, () => evaluateInPage(page, SCROLL_FN, direction));
+    },
+    async selectorExists(selector: string) {
+      return evaluateWithRetry(page, async () => {
+        const expr = `${SELECTOR_EXISTS_FN.trim()}(${JSON.stringify(selector)})`;
+        return (await page.evaluate(expr)) as boolean;
+      });
+    },
+    async runScript(code: string) {
+      await evaluateWithRetry(page, () => evaluateInPage(page, RUN_SCRIPT_FN, code));
     },
     isClosed: () => page.isClosed(),
   };

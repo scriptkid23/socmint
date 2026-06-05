@@ -68,6 +68,23 @@ describe('validateGraph', () => {
     expect(validateGraph(g).some((e) => e.nodeId === 'w')).toBe(true);
   });
 
+  it('allows an If node with true and false handles', () => {
+    const g: BoardGraph = {
+      nodes: [
+        { id: 'p', type: 'profile', position: pos, data: { profileId: 'a' } },
+        { id: 'i', type: 'if', position: pos, data: { selector: '#x', condition: 'exists' } },
+        { id: 'c', type: 'click', position: pos, data: { selector: '#go' } },
+        { id: 'w', type: 'wait', position: pos, data: { ms: 500 } },
+      ],
+      edges: [
+        { id: 'e1', source: 'p', target: 'i' },
+        { id: 'e2', source: 'i', target: 'c', sourceHandle: 'true' },
+        { id: 'e3', source: 'i', target: 'w', sourceHandle: 'false' },
+      ],
+    };
+    expect(validateGraph(g)).toEqual([]);
+  });
+
   it('flags an empty goto url and a duplicate profile', () => {
     const g: BoardGraph = {
       nodes: [

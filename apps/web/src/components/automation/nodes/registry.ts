@@ -9,6 +9,9 @@ import {
   type ClickNodeData,
   type FillNodeData,
   type GotoNodeData,
+  type IfCondition,
+  type IfNodeData,
+  type ScriptNodeData,
   type MetaMaskNodeData,
   type Profile,
   type ProfileNodeData,
@@ -27,6 +30,8 @@ import { RecordNode } from './record-node';
 import { MetaMaskNode } from './metamask-node';
 import { FillNode } from './fill-node';
 import { ClickNode } from './click-node';
+import { IfNode } from './if-node';
+import { ScriptNode } from './script-node';
 
 export const DEFAULT_WAIT_MS = 3000;
 /** Default per-step delay (ms) inserted between replayed record steps. */
@@ -363,6 +368,42 @@ export const NODE_DESCRIPTORS: NodeRegistry = {
         : [];
     },
   },
+
+  if: {
+    label: 'If',
+    component: IfNode,
+    defaultData: () => ({ selector: '', condition: 'exists' as IfCondition }),
+    serialize: (d) => ({
+      selector: (d.selector as string) ?? '',
+      condition: (d.condition as IfCondition) ?? 'exists',
+    }),
+    inject: (d, ctx) => ({
+      selector: (d.selector as string) ?? '',
+      condition: (d.condition as IfCondition) ?? 'exists',
+      onChange: (patch: Record<string, unknown>) => ctx.patch(patch),
+    }),
+    validate: (node) => {
+      const d = node.data as IfNodeData;
+      return !d.selector?.trim()
+        ? [{ nodeId: node.id, message: 'If selector is empty' }]
+        : [];
+    },
+  },
+
+  script: {
+    label: 'Script',
+    component: ScriptNode,
+    defaultData: () => ({ code: '' }),
+    serialize: (d) => ({ code: (d.code as string) ?? '' }),
+    inject: (d, ctx) => ({
+      code: (d.code as string) ?? '',
+      onChange: (patch: Record<string, unknown>) => ctx.patch(patch),
+    }),
+    validate: (node) => {
+      const d = node.data as ScriptNodeData;
+      return !d.code?.trim() ? [{ nodeId: node.id, message: 'Script code is empty' }] : [];
+    },
+  },
 };
 
 /** Toolbar / add-button order. */
@@ -373,6 +414,8 @@ export const NODE_ORDER: NodeType[] = [
   'agent',
   'fill',
   'click',
+  'if',
+  'script',
   'screenshot',
   'record',
   'metamask',

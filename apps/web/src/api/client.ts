@@ -81,6 +81,17 @@ export interface ClickNodeData {
   selector: string;
 }
 
+export type IfCondition = 'exists' | 'not_exists';
+
+export interface IfNodeData {
+  selector: string;
+  condition: IfCondition;
+}
+
+export interface ScriptNodeData {
+  code: string;
+}
+
 export type BoardNodeData =
   | ProfileNodeData
   | GotoNodeData
@@ -90,11 +101,24 @@ export type BoardNodeData =
   | MetaMaskNodeData
   | FillNodeData
   | ClickNodeData
+  | IfNodeData
+  | ScriptNodeData
   | Record<string, never>;
 
 export interface BoardNode {
   id: string;
-  type: 'profile' | 'goto' | 'wait' | 'agent' | 'screenshot' | 'record' | 'metamask' | 'fill' | 'click';
+  type:
+    | 'profile'
+    | 'goto'
+    | 'wait'
+    | 'agent'
+    | 'screenshot'
+    | 'record'
+    | 'metamask'
+    | 'fill'
+    | 'click'
+    | 'if'
+    | 'script';
   position: { x: number; y: number };
   data: BoardNodeData;
 }
@@ -102,6 +126,7 @@ export interface BoardEdge {
   id: string;
   source: string;
   target: string;
+  sourceHandle?: 'true' | 'false';
 }
 export interface BoardGraph {
   nodes: BoardNode[];

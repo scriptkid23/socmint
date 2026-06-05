@@ -18,6 +18,71 @@ export interface ExecuteFlowOptions {
   recordings?: RecordingRegistry;
 }
 
+function resolveFlowSteps(
+  steps: FlowStep[],
+  runDir: string,
+  seq: { n: number },
+): ResolvedFlowStep[] {
+  const out: ResolvedFlowStep[] = [];
+  for (const step of steps) {
+    if (step.type === 'screenshot') {
+      out.push({ type: 'screenshot', screenshotPath: resolve(runDir, `step-${seq.n++}.png`) });
+    } else if (step.type === 'wait') {
+      out.push({ type: 'wait', ms: step.ms });
+    } else if (step.type === 'if') {
+      out.push({
+        type: 'if',
+        selector: step.selector,
+        condition: step.condition,
+        thenSteps: resolveFlowSteps(step.thenSteps, runDir, seq),
+        elseSteps: resolveFlowSteps(step.elseSteps, runDir, seq),
+      });
+    } else if (step.type === 'script') {
+      out.push({ type: 'script', code: step.code });
+    } else if (step.type === 'agent') {
+      const i = seq.n++;
+      out.push({
+        type: 'agent',
+        task: {
+          prompt: step.prompt,
+          provider: step.provider,
+          model: step.model,
+          apiKey: step.apiKey,
+          baseUrl: step.baseUrl,
+        },
+        limits: {
+          maxSteps: step.maxSteps ?? 25,
+          timeoutMs: step.timeoutMs ?? 300_000,
+          allowDomains: step.allowDomains ?? [],
+          readOnly: step.readOnly ?? true,
+        },
+        transcriptPath: resolve(runDir, `step-${i}-agent-transcript.json`),
+      });
+    } else if (step.type === 'wallet') {
+      out.push({
+        type: 'wallet',
+        privateKey: step.privateKey,
+        chains: step.chains,
+        activeChainId: step.activeChainId,
+      });
+    } else if (step.type === 'fill') {
+      out.push({ type: 'fill', selector: step.selector, value: step.value });
+    } else if (step.type === 'click') {
+      out.push({ type: 'click', selector: step.selector });
+    } else if (step.type === 'scroll') {
+      out.push({ type: 'scroll', direction: step.direction });
+    } else {
+      out.push({
+        type: 'goto',
+        url: step.url,
+        waitUntil: step.waitUntil,
+        timeoutMs: step.timeoutMs,
+      });
+    }
+  }
+  return out;
+}
+
 export interface RunRequest {
   url: string;
   options?: {
@@ -132,51 +197,7 @@ export class RunService {
       proxy: profile.proxy,
     };
 
-    const resolved: ResolvedFlowStep[] = steps.map((step, i) => {
-      if (step.type === 'screenshot') {
-        return { type: 'screenshot', screenshotPath: resolve(runDir, `step-${i}.png`) };
-      }
-      if (step.type === 'wait') {
-        return { type: 'wait', ms: step.ms };
-      }
-      if (step.type === 'agent') {
-        return {
-          type: 'agent',
-          task: {
-            prompt: step.prompt,
-            provider: step.provider,
-            model: step.model,
-            apiKey: step.apiKey,
-            baseUrl: step.baseUrl,
-          },
-          limits: {
-            maxSteps: step.maxSteps ?? 25,
-            timeoutMs: step.timeoutMs ?? 300_000,
-            allowDomains: step.allowDomains ?? [],
-            readOnly: step.readOnly ?? true,
-          },
-          transcriptPath: resolve(runDir, `step-${i}-agent-transcript.json`),
-        };
-      }
-      if (step.type === 'wallet') {
-        return {
-          type: 'wallet',
-          privateKey: step.privateKey,
-          chains: step.chains,
-          activeChainId: step.activeChainId,
-        };
-      }
-      if (step.type === 'fill') {
-        return { type: 'fill', selector: step.selector, value: step.value };
-      }
-      if (step.type === 'click') {
-        return { type: 'click', selector: step.selector };
-      }
-      if (step.type === 'scroll') {
-        return { type: 'scroll', direction: step.direction };
-      }
-      return { type: 'goto', url: step.url, waitUntil: step.waitUntil, timeoutMs: step.timeoutMs };
-    });
+    const resolved = resolveFlowSteps(steps, runDir, { n: 0 });
 
     let record: FlowRunRecord;
     let keepRecording = false;

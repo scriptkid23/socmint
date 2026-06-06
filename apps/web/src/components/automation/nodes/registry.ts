@@ -32,6 +32,7 @@ import { FillNode } from './fill-node';
 import { ClickNode } from './click-node';
 import { IfNode } from './if-node';
 import { ScriptNode } from './script-node';
+import { withDeletable } from './deletable-node';
 
 export const DEFAULT_WAIT_MS = 3000;
 /** Default per-step delay (ms) inserted between replayed record steps. */
@@ -423,7 +424,7 @@ export const NODE_ORDER: NodeType[] = [
 
 /** Component map for ReactFlow's `nodeTypes` prop. */
 export const nodeTypes: NodeTypes = Object.fromEntries(
-  NODE_ORDER.map((type) => [type, NODE_DESCRIPTORS[type].component]),
+  NODE_ORDER.map((type) => [type, withDeletable(NODE_DESCRIPTORS[type].component)]),
 );
 
 function descriptorFor(type: string | undefined): NodeDescriptor | undefined {

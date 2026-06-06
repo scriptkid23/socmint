@@ -199,7 +199,15 @@ export const FlowCanvas = forwardRef<
       data: injectNode(n.type, n.data as Record<string, unknown>, n.id),
     }));
     setNodes(seeded);
-    setEdges(board.graph.edges.map((e) => ({ id: e.id, source: e.source, target: e.target })));
+    setEdges(
+      board.graph.edges.map((e) => ({
+        id: e.id,
+        source: e.source,
+        target: e.target,
+        // Preserve the if-node branch handle so reloads keep true/false wiring.
+        ...(e.sourceHandle ? { sourceHandle: e.sourceHandle } : {}),
+      })),
+    );
     hydrated.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [board.id]);
@@ -321,6 +329,17 @@ export const FlowCanvas = forwardRef<
 
   const validation = useMemo(() => validateGraph(toGraph(nodes, edges)), [nodes, edges]);
 
+  // Purely visual "flowing" effect on connections; not persisted into the graph.
+  const animatedEdges = useMemo(
+    () =>
+      edges.map((e) => ({
+        ...e,
+        animated: true,
+        style: { strokeWidth: 2, ...e.style },
+      })),
+    [edges],
+  );
+
   const run = async () => {
     setErrorMsg(null);
     if (validation.length > 0) {
@@ -375,7 +394,7 @@ export const FlowCanvas = forwardRef<
       <div className="min-h-0 flex-1" ref={wrapperRef}>
         <ReactFlow
           nodes={nodes}
-          edges={edges}
+          edges={animatedEdges}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}

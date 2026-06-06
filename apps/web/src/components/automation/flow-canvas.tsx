@@ -9,6 +9,7 @@ import {
   type Connection,
   type Edge,
   type Node,
+  type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import {
@@ -87,6 +88,8 @@ export const FlowCanvas = forwardRef<
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hydrated = useRef(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const rfInstance = useRef<ReactFlowInstance<Node, Edge> | null>(null);
   // Consecutive getRecording failures per record node (transient-error tolerance).
   const recordPollFailures = useRef<Map<string, number>>(new Map());
 
@@ -273,7 +276,23 @@ export const FlowCanvas = forwardRef<
   const addNode = useCallback(
     (type: NodeType) => {
       const id = newId(type);
-      const position = { x: 80 + Math.random() * 240, y: 80 + Math.random() * 240 };
+      // Drop the node at the center of whatever the user is currently viewing,
+      // falling back to a small offset near origin before the flow has mounted.
+      const instance = rfInstance.current;
+      const wrapper = wrapperRef.current;
+      let position = { x: 80 + Math.random() * 240, y: 80 + Math.random() * 240 };
+      if (instance && wrapper) {
+        const rect = wrapper.getBoundingClientRect();
+        const center = instance.screenToFlowPosition({
+          x: rect.left + rect.width / 2,
+          y: rect.top + rect.height / 2,
+        });
+        // Small jitter so repeated adds don't stack perfectly on top of each other.
+        position = {
+          x: center.x - 90 + (Math.random() * 40 - 20),
+          y: center.y - 40 + (Math.random() * 40 - 20),
+        };
+      }
       setNodes((ns) => [
         ...ns,
         { id, type, position, data: injectNode(type, defaultNodeData(type), id) },
@@ -353,13 +372,16 @@ export const FlowCanvas = forwardRef<
         </p>
       )}
 
-      <div className="min-h-0 flex-1">
+      <div className="min-h-0 flex-1" ref={wrapperRef}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          onInit={(instance) => {
+            rfInstance.current = instance;
+          }}
           nodeTypes={nodeTypes}
           fitView
         >

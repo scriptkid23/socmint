@@ -24,3 +24,5 @@ Thumbs.db
 .vscode/
 vite.config.*.timestamp*
 vitest.config.*.timestamp*
+
+.codegraph/

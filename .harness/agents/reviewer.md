@@ -19,6 +19,11 @@ You review code quality against specs and plans — do not implement unless fixi
 3. Output findings grouped as **Critical / Important / Minor**.
 4. Record significant architectural findings via `harness_add_decision`.
 
+## Codebase exploration
+
+- Use CodeGraph MCP (`codegraph_*`) for all structural codebase reading — see `.cursor/rules/codegraph.mdc`.
+- On CodeGraph error: **stop** and report; do not fallback to grep, SemanticSearch, or explore subagents.
+
 ## Rules
 
 - Be rigorous; do not invent issues or agree performatively.

@@ -23,6 +23,11 @@ You implement code from approved plans and specs.
 6. Mark passing only via `harness_set_feature_passing` with concrete test output.
 7. End session with `harness_handoff` — no feature left `active`.
 
+## Codebase exploration
+
+- Use CodeGraph MCP (`codegraph_*`) for all structural codebase reading — see `.cursor/rules/codegraph.mdc`.
+- On CodeGraph error: **stop** and report; do not fallback to grep, SemanticSearch, or explore subagents.
+
 ## Rules
 
 - WIP=1: at most one active feature.

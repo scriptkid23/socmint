@@ -16,6 +16,15 @@ export function AutomationSidebar({
   onAddNode,
   boardStatuses,
   nodesDisabled,
+  checkedIds,
+  onToggleCheck,
+  runningIds,
+  onRunAll,
+  onRunSelected,
+  batchRunning,
+  canvasRunning,
+  batchFailures,
+  onClearFailures,
 }: {
   boards: Board[];
   selectedId: string | null;
@@ -26,6 +35,15 @@ export function AutomationSidebar({
   onAddNode: (type: NodeType) => void;
   boardStatuses?: Record<string, ResultKind | undefined>;
   nodesDisabled?: boolean;
+  checkedIds?: Set<string>;
+  onToggleCheck?: (id: string) => void;
+  runningIds?: Set<string>;
+  onRunAll?: () => void;
+  onRunSelected?: () => void;
+  batchRunning?: boolean;
+  canvasRunning?: boolean;
+  batchFailures?: { boardName: string; message: string }[];
+  onClearFailures?: () => void;
 }) {
   const [tab, setTab] = useState<SidebarTab>('boards');
 
@@ -47,16 +65,44 @@ export function AutomationSidebar({
       </div>
 
       {tab === 'boards' ? (
-        <BoardList
-          boards={boards}
-          selectedId={selectedId}
-          onSelect={onSelect}
-          onCreate={onCreate}
-          onDelete={onDelete}
-          onRename={onRename}
-          boardStatuses={boardStatuses}
-          embedded
-        />
+        <div className="flex min-h-0 flex-1 flex-col">
+          {batchFailures && batchFailures.length > 0 && (
+            <div className="shrink-0 border-b border-border-light bg-foreground px-3 py-2 font-mono text-[9px] leading-snug text-background">
+              <div className="flex items-start justify-between gap-2">
+                <p>
+                  {batchFailures.map((f) => `${f.boardName}: ${f.message}`).join(' · ')}
+                </p>
+                {onClearFailures && (
+                  <button
+                    type="button"
+                    onClick={onClearFailures}
+                    className="shrink-0 opacity-70 hover:opacity-100"
+                    aria-label="Dismiss errors"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+          <BoardList
+            boards={boards}
+            selectedId={selectedId}
+            onSelect={onSelect}
+            onCreate={onCreate}
+            onDelete={onDelete}
+            onRename={onRename}
+            boardStatuses={boardStatuses}
+            checkedIds={checkedIds}
+            onToggleCheck={onToggleCheck}
+            runningIds={runningIds}
+            onRunAll={onRunAll}
+            onRunSelected={onRunSelected}
+            batchRunning={batchRunning}
+            canvasRunning={canvasRunning}
+            embedded
+          />
+        </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
           <p className="border-b border-border-light px-4 py-2 font-mono text-[9px] leading-snug text-muted-foreground">

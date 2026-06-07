@@ -74,6 +74,8 @@ function chainEndsWithRecord(profileNodeId: string, nodes: Node[], edges: Edge[]
 
 export interface FlowCanvasHandle {
   addNode: (type: NodeType) => void;
+  persistNow: () => Promise<void>;
+  applyRunResult: (boardRun: BoardRunRecord) => void;
 }
 
 export const FlowCanvas = forwardRef<
@@ -82,8 +84,10 @@ export const FlowCanvas = forwardRef<
     board: Board;
     profiles: Profile[];
     onBoardResult?: (boardId: string, status: 'pass' | 'fail' | undefined) => void;
+    externalRunning?: boolean;
+    onRunningChange?: (running: boolean) => void;
   }
->(function FlowCanvas({ board, profiles, onBoardResult }, ref) {
+>(function FlowCanvas({ board, profiles, onBoardResult, externalRunning, onRunningChange }, ref) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const nodesRef = useRef<Node[]>([]);
@@ -317,7 +321,15 @@ export const FlowCanvas = forwardRef<
     [injectNode, setNodes],
   );
 
-  useImperativeHandle(ref, () => ({ addNode }), [addNode]);
+  useImperativeHandle(
+    ref,
+    () => ({
+      addNode,
+      persistNow: () => persistBoardNow(nodesRef.current),
+      applyRunResult,
+    }),
+    [addNode, persistBoardNow, applyRunResult],
+  );
 
   useEffect(() => {
     if (!hydrated.current) return;
@@ -348,22 +360,8 @@ export const FlowCanvas = forwardRef<
     [edges],
   );
 
-  const run = async () => {
-    setErrorMsg(null);
-    if (validation.length > 0) {
-      setErrorMsg(validation.map((e) => e.message).join('; '));
-      return;
-    }
-    setRunning(true);
-    setResult(null);
-    setNodes((ns) =>
-      ns.map((n) =>
-        n.type === 'result' ? { ...n, data: { ...n.data, runtimeKind: undefined } } : n,
-      ),
-    );
-    try {
-      await api.updateBoard(board.id, { graph: toGraph(nodes, edges) });
-      const boardRun = await api.runBoard(board.id);
+  const applyRunResult = useCallback(
+    (boardRun: BoardRunRecord) => {
       setResult(boardRun);
       const allRecords = boardRun.runs.flatMap((r) => r.steps);
       const nodeStates = resultNodeStatesFromRecords(allRecords);
@@ -384,11 +382,34 @@ export const FlowCanvas = forwardRef<
           return { ...n, data: { ...n.data, recording: true } };
         });
       });
+    },
+    [board.id, edges, onBoardResult, setNodes],
+  );
+
+  const run = async () => {
+    setErrorMsg(null);
+    if (validation.length > 0) {
+      setErrorMsg(validation.map((e) => e.message).join('; '));
+      return;
+    }
+    setRunning(true);
+    onRunningChange?.(true);
+    setResult(null);
+    setNodes((ns) =>
+      ns.map((n) =>
+        n.type === 'result' ? { ...n, data: { ...n.data, runtimeKind: undefined } } : n,
+      ),
+    );
+    try {
+      await api.updateBoard(board.id, { graph: toGraph(nodes, edges) });
+      const boardRun = await api.runBoard(board.id);
+      applyRunResult(boardRun);
     } catch (e) {
       onBoardResult?.(board.id, undefined);
       setErrorMsg(e instanceof Error ? e.message : 'Run failed');
     } finally {
       setRunning(false);
+      onRunningChange?.(false);
     }
   };
 
@@ -401,8 +422,8 @@ export const FlowCanvas = forwardRef<
         <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
           {saving ? 'Saving…' : 'Saved'}
         </span>
-        <Button onClick={run} disabled={running} className="text-xs">
-          {running ? 'Running…' : 'Run'}
+        <Button onClick={run} disabled={running || externalRunning} className="text-xs">
+          {running || externalRunning ? 'Running…' : 'Run'}
         </Button>
       </div>
 

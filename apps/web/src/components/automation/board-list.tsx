@@ -23,6 +23,13 @@ export function BoardList({
   onDelete,
   onRename,
   boardStatuses,
+  checkedIds,
+  onToggleCheck,
+  runningIds,
+  onRunAll,
+  onRunSelected,
+  batchRunning,
+  canvasRunning,
   embedded = false,
 }: {
   boards: Board[];
@@ -32,6 +39,13 @@ export function BoardList({
   onDelete: (id: string) => void;
   onRename: (id: string, name: string) => void;
   boardStatuses?: Record<string, ResultKind | undefined>;
+  checkedIds?: Set<string>;
+  onToggleCheck?: (id: string) => void;
+  runningIds?: Set<string>;
+  onRunAll?: () => void;
+  onRunSelected?: () => void;
+  batchRunning?: boolean;
+  canvasRunning?: boolean;
   /** When true, omit outer aside chrome (used inside AutomationSidebar). */
   embedded?: boolean;
 }) {
@@ -58,8 +72,29 @@ export function BoardList({
 
   const cancel = () => setEditingId(null);
 
+  const runsDisabled = batchRunning || canvasRunning;
+  const selectedCount = checkedIds?.size ?? 0;
+
   const list = (
     <>
+      {onRunAll && onRunSelected && (
+        <div className="flex gap-1 border-b border-border-light px-2 py-2">
+          <Button
+            onClick={onRunAll}
+            disabled={runsDisabled || boards.length === 0}
+            className="flex-1 text-[10px]"
+          >
+            Run All
+          </Button>
+          <Button
+            onClick={onRunSelected}
+            disabled={runsDisabled || selectedCount === 0}
+            className="flex-1 text-[10px]"
+          >
+            Run Selected
+          </Button>
+        </div>
+      )}
       <div className="flex items-center justify-between border-b border-border-light px-4 py-3">
         <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
           {boards.length} board{boards.length === 1 ? '' : 's'}
@@ -70,9 +105,21 @@ export function BoardList({
       </div>
       <ul className="min-h-0 flex-1 overflow-auto">
         {boards.map((b) => (
-          <li key={b.id} className="border-b border-border-light">
+          <li key={b.id} className="flex border-b border-border-light">
+            {onToggleCheck && (
+              <label className="flex shrink-0 items-center px-2">
+                <input
+                  type="checkbox"
+                  checked={checkedIds?.has(b.id) ?? false}
+                  onChange={() => onToggleCheck(b.id)}
+                  onClick={(e) => e.stopPropagation()}
+                  aria-label={`Select ${b.name}`}
+                  className="h-3.5 w-3.5 accent-foreground"
+                />
+              </label>
+            )}
             {editingId === b.id ? (
-              <div className="flex items-center gap-1 px-2 py-2">
+              <div className="flex min-w-0 flex-1 items-center gap-1 px-2 py-2">
                 <Input
                   ref={inputRef}
                   className="h-7 flex-1 px-2 text-xs"
@@ -95,9 +142,17 @@ export function BoardList({
                 type="button"
                 onClick={() => onSelect(b.id)}
                 onDoubleClick={() => startEdit(b)}
-                className={`flex w-full items-center justify-between px-4 py-3 text-left font-mono text-xs ${rowClasses(b.id, selectedId, boardStatuses)}`}
+                className={`flex min-w-0 flex-1 items-center justify-between px-2 py-3 text-left font-mono text-xs ${rowClasses(b.id, selectedId, boardStatuses)}`}
               >
-                <span className="truncate">{b.name}</span>
+                <span className="flex min-w-0 items-center gap-1.5 truncate">
+                  {runningIds?.has(b.id) && (
+                    <span
+                      className="inline-block h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-current"
+                      aria-label="Running"
+                    />
+                  )}
+                  <span className="truncate">{b.name}</span>
+                </span>
                 <span className="ml-2 flex shrink-0 items-center gap-1.5">
                   <span
                     role="button"

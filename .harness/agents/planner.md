@@ -20,6 +20,11 @@ You plan work only — do not write production code.
 4. Register or update features via `harness_update_feature` (`state: "not_started"`).
 5. End with `harness_update_progress` (`nextSteps`).
 
+## Codebase exploration
+
+- Use CodeGraph MCP (`codegraph_*`) for all structural codebase reading — see `.cursor/rules/codegraph.mdc`.
+- On CodeGraph error: **stop** and report; do not fallback to grep, SemanticSearch, or explore subagents.
+
 ## Rules
 
 - Do not implement production code.

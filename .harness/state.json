@@ -4,7 +4,8 @@
     "description": "Nx monorepo: CloakBrowser profile automation, flow boards, AI agent nodes, and wallet injection.",
     "hardConstraints": [
       "No real network calls in unit tests",
-      "Any DB schema change must go through a migration"
+      "Any DB schema change must go through a migration",
+      "Architecture changes require harness_add_decision before implementation"
     ]
   },
   "features": [
@@ -49,30 +50,40 @@
       "behavior": "Automation step chains and verification run measurably faster with same outputs",
       "verification": "pnpm test && pnpm build",
       "state": "passing",
-      "evidence": "pnpm test: PASS - automation-api 84 passed (4 skipped), web 23 passed; nx test browser-core 77/77. pnpm build PASS. Perf fixes: nav probe 400ms/1s (was 8s waitForNavigation per click), goto domcontentloaded default, DOM_SETTLE only on type/scroll, flow screenshot viewport-only. Decision perf-nav-probe recorded."
+      "evidence": "pnpm test: PASS - automation-api 84 passed (4 skipped), web 23 passed; nx test browser-core 77/77. pnpm build PASS."
     },
     {
       "id": "record-node-replay",
       "behavior": "Record node toggles Record (live capture via Run board) and Replay (edit saved steps, then full playback of goto/click/fill/scroll).",
       "verification": "pnpm exec nx test browser-core && pnpm exec nx test automation-api && pnpm exec nx test web",
       "state": "passing",
-      "evidence": "Verification 2026-06-05: nx test browser-core 77/77 pass (added scroll FlowStep test); nx test automation-api 84 pass/4 skipped (new recorded-steps-to-flow.spec + resolve-chains replay tests); nx test web 23/23 pass. Lint clean on record-node.tsx, registry.ts, flow-canvas.tsx. Implements: scroll FlowStep (browser-core + run.types/run.service), pure compileRecordedSteps(), RecordNodeData.mode? (default record), replay branch in node-registry, replay validation (empty selector), web UI mode toggle + inline editable replay steps."
+      "evidence": "nx test browser-core 77/77; automation-api 84 pass; web 23/23 pass (2026-06-05)."
+    },
+    {
+      "id": "board-result-node-execution",
+      "behavior": "Automation board supports Result node pass/fail; reached branches emit result marker records with nodeId and kind.",
+      "verification": "pnpm exec nx test automation-api --testPathPattern=resolve-chains|run.service && pnpm exec nx test browser-core --testPathPattern=cloak-browser.service.spec",
+      "state": "passing",
+      "evidence": "automation-api 44 passed; browser-core 24 passed (2026-06-07)."
+    },
+    {
+      "id": "board-result-sidebar-status",
+      "behavior": "After Run board, Result nodes and BoardList rows show ephemeral pass/fail color for the current session.",
+      "verification": "pnpm exec nx test web -- src/components/automation/board-result-status.spec.ts src/components/automation/board-list.spec.tsx",
+      "state": "passing",
+      "evidence": "web 7 tests passed; pnpm build success (2026-06-07)."
     }
   ],
   "progress": {
-    "testStatus": "PASS - nx test browser-core 77/77, automation-api 84 (4 skipped), web 23/23",
-    "updatedAt": "2026-06-05T15:46:00Z",
+    "updatedAt": "2026-06-07T12:00:00Z",
     "completed": [
-      "record-node-replay passing",
-      "perf-step-execution passing (restored)",
-      "Decisions perf-nav-probe + record-replay-mode-on-node"
+      "harness re-init: agents in .harness/agents/, single cursor rule"
     ],
     "inProgress": [],
     "blocked": [],
     "nextSteps": [
-      "Manual UI verify replay edit (100 -> 10) then Run",
-      "Commit record/replay + perf changes",
-      "Activate one dormant feature next session"
+      "Commit board-result-node work when ready",
+      "Reconcile dormant features (many already implemented in codebase)"
     ]
   },
   "decisions": [
@@ -87,15 +98,34 @@
       "id": "record-replay-mode-on-node",
       "date": "2026-06-05",
       "title": "Record/Replay as a mode toggle on the existing Record node (not a new node type)",
-      "rationale": "Reuse captured RecordedStep[] in place. mode?: 'record'|'replay' (optional, defaults 'record') keeps old boards valid. Replay compiles steps via shared pure compileRecordedSteps() into goto/click/fill/scroll FlowSteps with settle waits; record mode keeps the browser open for capture as before. Editing happens inline in the node so users can change e.g. input 100 -> 10.",
-      "rejected": "Separate 'Replay' node type - duplicates RecordedStep wiring, profile resolution, serialization, and forces copying steps between two nodes; rejected for redundancy and worse UX."
+      "rationale": "Reuse captured RecordedStep[] in place. mode?: 'record'|'replay' (optional, defaults 'record') keeps old boards valid.",
+      "rejected": "Separate Replay node type - duplicates wiring and worse UX."
     }
   ],
   "agents": [
     {
-      "id": "builder",
+      "id": "planner",
+      "role": "planner",
+      "instructionsPath": ".harness/agents/planner.md",
+      "instructions": "Read full instructions from .harness/agents/planner.md"
+    },
+    {
+      "id": "coder",
       "role": "implementer",
-      "instructions": "Write code + tests. Do not change architecture without harness_add_decision."
+      "instructionsPath": ".harness/agents/coder.md",
+      "instructions": "Read full instructions from .harness/agents/coder.md"
+    },
+    {
+      "id": "reviewer",
+      "role": "reviewer",
+      "instructionsPath": ".harness/agents/reviewer.md",
+      "instructions": "Read full instructions from .harness/agents/reviewer.md"
+    },
+    {
+      "id": "architect",
+      "role": "architect",
+      "instructionsPath": ".harness/agents/architect.md",
+      "instructions": "Read full instructions from .harness/agents/architect.md"
     }
   ]
 }

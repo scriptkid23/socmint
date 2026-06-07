@@ -321,4 +321,38 @@ describe('RunService.executeFlow', () => {
       },
     ]);
   });
+
+  it('preserves result marker records without failing the run when kind is fail', async () => {
+    const profile = await profiles.create({ label: 'p-result' });
+    const browser = {
+      runFlow: jest.fn().mockResolvedValue({
+        results: [
+          { type: 'goto', status: 'completed', error: null, title: 'T', finalUrl: 'https://e/' },
+          {
+            type: 'result',
+            status: 'completed',
+            error: null,
+            nodeId: 'r1',
+            kind: 'fail',
+          },
+        ],
+      }),
+    };
+    const svc = service(browser);
+
+    const rec = await svc.executeFlow(profile.id, [
+      { type: 'goto', url: 'https://e' },
+      { type: 'result', nodeId: 'r1', kind: 'fail' },
+    ]);
+
+    expect(rec.status).toBe('completed');
+    expect(rec.steps.find((s) => s.type === 'result')).toMatchObject({
+      type: 'result',
+      status: 'completed',
+      nodeId: 'r1',
+      kind: 'fail',
+    });
+    const resolved = browser.runFlow.mock.calls[0][1];
+    expect(resolved[1]).toEqual({ type: 'result', nodeId: 'r1', kind: 'fail' });
+  });
 });

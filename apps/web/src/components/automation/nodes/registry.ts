@@ -18,6 +18,8 @@ import {
   type RecordedStep,
   type RecordNodeData,
   type RecordNodeMode,
+  type ResultKind,
+  type ResultNodeData,
   type WaitNodeData,
   type WaitUntil,
 } from '../../../api/client';
@@ -32,6 +34,7 @@ import { FillNode } from './fill-node';
 import { ClickNode } from './click-node';
 import { IfNode } from './if-node';
 import { ScriptNode } from './script-node';
+import { ResultNode } from './result-node';
 import { withDeletable } from './deletable-node';
 
 export const DEFAULT_WAIT_MS = 3000;
@@ -405,6 +408,19 @@ export const NODE_DESCRIPTORS: NodeRegistry = {
       return !d.code?.trim() ? [{ nodeId: node.id, message: 'Script code is empty' }] : [];
     },
   },
+
+  result: {
+    label: 'Result',
+    component: ResultNode,
+    defaultData: () => ({ kind: 'pass' as ResultKind }),
+    serialize: (d) => ({ kind: (d.kind as ResultKind) ?? 'pass' }),
+    inject: (d, ctx) => ({
+      kind: (d.kind as ResultKind) ?? 'pass',
+      runtimeKind: d.runtimeKind as ResultKind | undefined,
+      onChange: (patch: { kind: ResultKind }) => ctx.patch(patch),
+    }),
+    validate: () => [],
+  },
 };
 
 /** Toolbar / add-button order. */
@@ -416,6 +432,7 @@ export const NODE_ORDER: NodeType[] = [
   'fill',
   'click',
   'if',
+  'result',
   'script',
   'screenshot',
   'record',

@@ -1,4 +1,5 @@
 import type { WaitUntil } from '@socmint/browser-core';
+import type { ResultKind } from '../boards/board.types';
 
 export type RunStatus = 'completed' | 'failed';
 
@@ -47,7 +48,8 @@ export type FlowStep =
       thenSteps: FlowStep[];
       elseSteps: FlowStep[];
     }
-  | { type: 'script'; code: string };
+  | { type: 'script'; code: string }
+  | { type: 'result'; nodeId: string; kind: ResultKind };
 
 export interface FlowStepRecord {
   type:
@@ -60,7 +62,8 @@ export interface FlowStepRecord {
     | 'click'
     | 'scroll'
     | 'if'
-    | 'script';
+    | 'script'
+    | 'result';
   status: 'completed' | 'failed';
   error: string | null;
   /** goto only */
@@ -74,6 +77,10 @@ export interface FlowStepRecord {
   stopReason?: 'finished' | 'max-steps' | 'timeout' | 'error';
   result?: unknown;
   transcript?: string;
+  /** result only */
+  nodeId?: string;
+  /** result only */
+  kind?: ResultKind;
 }
 
 export interface FlowRunRecord {

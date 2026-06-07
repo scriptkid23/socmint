@@ -114,6 +114,7 @@ function compileSubchain(
 
     const out = compileNodeSteps(node, steps);
     steps.push(...out.steps);
+    if (out.terminal) break;
     current = linearNext(outgoing, current);
   }
 
@@ -168,6 +169,7 @@ export function resolveChains(graph: BoardGraph): FlowJob[] {
       const out = compileNodeSteps(target, steps);
       steps.push(...out.steps);
       if (out.endsWithRecord) endsWithRecord = true;
+      if (out.terminal) break;
       current = targetId;
     }
 

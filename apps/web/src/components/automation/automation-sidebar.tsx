@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Board } from '../../api/client';
+import type { Board, ResultKind } from '../../api/client';
 import { BoardList } from './board-list';
 import { NodePalette } from './node-palette';
 import type { NodeType } from './nodes/registry';
@@ -14,6 +14,7 @@ export function AutomationSidebar({
   onDelete,
   onRename,
   onAddNode,
+  boardStatuses,
   nodesDisabled,
 }: {
   boards: Board[];
@@ -23,6 +24,7 @@ export function AutomationSidebar({
   onDelete: (id: string) => void;
   onRename: (id: string, name: string) => void;
   onAddNode: (type: NodeType) => void;
+  boardStatuses?: Record<string, ResultKind | undefined>;
   nodesDisabled?: boolean;
 }) {
   const [tab, setTab] = useState<SidebarTab>('boards');
@@ -52,6 +54,7 @@ export function AutomationSidebar({
           onCreate={onCreate}
           onDelete={onDelete}
           onRename={onRename}
+          boardStatuses={boardStatuses}
           embedded
         />
       ) : (

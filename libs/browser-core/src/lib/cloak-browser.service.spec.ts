@@ -827,6 +827,72 @@ describe('CloakBrowserService.runFlow', () => {
     expect(evals.some((e) => e.includes('alert'))).toBe(true);
   });
 
+  it('emits a result marker without touching the page', async () => {
+    const { launcher, calls, isClosed } = makeFakes();
+    const svc = new CloakBrowserService(launcher);
+    const { results } = await svc.runFlow(launch, [
+      { type: 'goto', url: 'https://example.com' },
+      { type: 'result', nodeId: 'r1', kind: 'pass' },
+    ]);
+    expect(calls).toEqual(['goto:https://example.com']);
+    expect(results[1]).toMatchObject({
+      type: 'result',
+      status: 'completed',
+      error: null,
+      nodeId: 'r1',
+      kind: 'pass',
+    });
+    expect(isClosed()).toBe(true);
+  });
+
+  it('emits only the Result marker from the if branch selected at runtime', async () => {
+    const page = {
+      async goto() {},
+      async title() {
+        return 'T';
+      },
+      url() {
+        return 'https://app.example/';
+      },
+      async evaluate(expr: string) {
+        if (expr.includes('document.querySelector')) return true;
+        return undefined;
+      },
+      async screenshot() {},
+      on() {},
+    } as unknown as PageLike;
+    const launcher: BrowserLauncher = {
+      async ensureBinary() {},
+      async launchPersistentContext() {
+        return {
+          async newPage() {
+            return page;
+          },
+          pages() {
+            return [page];
+          },
+          on() {},
+          async close() {},
+          async addInitScript() {},
+          async exposeFunction() {},
+        } as BrowserContextLike;
+      },
+    };
+    const svc = new CloakBrowserService(launcher);
+    const { results } = await svc.runFlow(launch, [
+      {
+        type: 'if',
+        selector: '#ok',
+        condition: 'exists',
+        thenSteps: [{ type: 'result', nodeId: 'pass-node', kind: 'pass' }],
+        elseSteps: [{ type: 'result', nodeId: 'fail-node', kind: 'fail' }],
+      },
+    ]);
+    expect(results.filter((r) => r.type === 'result')).toEqual([
+      expect.objectContaining({ nodeId: 'pass-node', kind: 'pass', status: 'completed' }),
+    ]);
+  });
+
   it('keeps browser open for recording when requested', async () => {
     const { launcher, calls, isClosed } = makeFakes();
     const svc = new CloakBrowserService(launcher);

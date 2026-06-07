@@ -23,6 +23,10 @@ import {
 } from '../../api/client';
 import { validateGraph } from './graph-validation';
 import {
+  aggregateBoardResult,
+  resultNodeStatesFromRecords,
+} from './board-result-status';
+import {
   type NodeRuntimeContext,
   type NodeType,
   defaultNodeData,
@@ -74,8 +78,12 @@ export interface FlowCanvasHandle {
 
 export const FlowCanvas = forwardRef<
   FlowCanvasHandle,
-  { board: Board; profiles: Profile[] }
->(function FlowCanvas({ board, profiles }, ref) {
+  {
+    board: Board;
+    profiles: Profile[];
+    onBoardResult?: (boardId: string, status: 'pass' | 'fail' | undefined) => void;
+  }
+>(function FlowCanvas({ board, profiles, onBoardResult }, ref) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const nodesRef = useRef<Node[]>([]);
@@ -348,12 +356,24 @@ export const FlowCanvas = forwardRef<
     }
     setRunning(true);
     setResult(null);
+    setNodes((ns) =>
+      ns.map((n) =>
+        n.type === 'result' ? { ...n, data: { ...n.data, runtimeKind: undefined } } : n,
+      ),
+    );
     try {
       await api.updateBoard(board.id, { graph: toGraph(nodes, edges) });
-      setResult(await api.runBoard(board.id));
+      const boardRun = await api.runBoard(board.id);
+      setResult(boardRun);
+      const allRecords = boardRun.runs.flatMap((r) => r.steps);
+      const nodeStates = resultNodeStatesFromRecords(allRecords);
+      onBoardResult?.(board.id, aggregateBoardResult(allRecords));
       setNodes((ns) => {
         const profileNodes = ns.filter((n) => n.type === 'profile');
         return ns.map((n) => {
+          if (n.type === 'result') {
+            return { ...n, data: { ...n.data, runtimeKind: nodeStates[n.id] } };
+          }
           if (n.type !== 'record') return n;
           if (((n.data as { mode?: string }).mode ?? 'record') !== 'record') return n;
           const profileNode = profileNodes.find((p) => {
@@ -365,6 +385,7 @@ export const FlowCanvas = forwardRef<
         });
       });
     } catch (e) {
+      onBoardResult?.(board.id, undefined);
       setErrorMsg(e instanceof Error ? e.message : 'Run failed');
     } finally {
       setRunning(false);

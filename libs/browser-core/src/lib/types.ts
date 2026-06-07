@@ -88,7 +88,8 @@ export type ResolvedFlowStep =
       thenSteps: ResolvedFlowStep[];
       elseSteps: ResolvedFlowStep[];
     }
-  | { type: 'script'; code: string };
+  | { type: 'script'; code: string }
+  | { type: 'result'; nodeId: string; kind: 'pass' | 'fail' };
 
 export interface RunFlowOptions {
   /** When true, keep the browser open and attach a recorder after steps finish. */
@@ -162,4 +163,11 @@ export type FlowStepResult =
       type: 'script';
       status: 'completed' | 'failed';
       error: string | null;
+    }
+  | {
+      type: 'result';
+      status: 'completed' | 'failed';
+      error: string | null;
+      nodeId: string;
+      kind: 'pass' | 'fail';
     };

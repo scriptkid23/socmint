@@ -71,6 +71,8 @@ function resolveFlowSteps(
       out.push({ type: 'click', selector: step.selector });
     } else if (step.type === 'scroll') {
       out.push({ type: 'scroll', direction: step.direction });
+    } else if (step.type === 'result') {
+      out.push({ type: 'result', nodeId: step.nodeId, kind: step.kind });
     } else {
       out.push({
         type: 'goto',
@@ -223,6 +225,15 @@ export class RunService {
             stopReason: r.stopReason,
             result: r.result,
             transcript: r.transcriptPath ? `runs/${runId}/step-${i}-agent-transcript.json` : undefined,
+          };
+        }
+        if (r.type === 'result') {
+          return {
+            type: 'result',
+            status: r.status,
+            error: r.error,
+            nodeId: r.nodeId,
+            kind: r.kind,
           };
         }
         return {

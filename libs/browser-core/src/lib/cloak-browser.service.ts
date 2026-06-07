@@ -108,6 +108,14 @@ export class CloakBrowserService {
         if (step.type === 'scroll') return { type: 'scroll', ...base };
         if (step.type === 'screenshot') return { type: 'screenshot', ...base, screenshotPath: null };
         if (step.type === 'if') return { type: 'if', ...base, branch: 'then' };
+        if (step.type === 'result') {
+          return {
+            type: 'result',
+            ...base,
+            nodeId: step.nodeId,
+            kind: step.kind,
+          };
+        }
         return { type: 'script', ...base };
       };
 
@@ -126,6 +134,16 @@ export class CloakBrowserService {
               });
               const branch = takeThen ? step.thenSteps : step.elseSteps;
               if (!(await executeAll(branch))) return false;
+              continue;
+            }
+            if (step.type === 'result') {
+              results.push({
+                type: 'result',
+                status: 'completed',
+                error: null,
+                nodeId: step.nodeId,
+                kind: step.kind,
+              });
               continue;
             }
             if (step.type === 'goto') {

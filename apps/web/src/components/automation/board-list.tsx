@@ -1,8 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { Pencil } from 'lucide-react';
-import type { Board } from '../../api/client';
+import type { Board, ResultKind } from '../../api/client';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+
+function rowClasses(
+  boardId: string,
+  selectedId: string | null,
+  boardStatuses?: Record<string, ResultKind | undefined>,
+) {
+  const status = boardStatuses?.[boardId];
+  if (status === 'pass') return 'bg-green-600 text-white';
+  if (status === 'fail') return 'bg-red-600 text-white';
+  return boardId === selectedId ? 'bg-foreground text-background' : '';
+}
 
 export function BoardList({
   boards,
@@ -11,6 +22,7 @@ export function BoardList({
   onCreate,
   onDelete,
   onRename,
+  boardStatuses,
   embedded = false,
 }: {
   boards: Board[];
@@ -19,6 +31,7 @@ export function BoardList({
   onCreate: () => void;
   onDelete: (id: string) => void;
   onRename: (id: string, name: string) => void;
+  boardStatuses?: Record<string, ResultKind | undefined>;
   /** When true, omit outer aside chrome (used inside AutomationSidebar). */
   embedded?: boolean;
 }) {
@@ -82,9 +95,7 @@ export function BoardList({
                 type="button"
                 onClick={() => onSelect(b.id)}
                 onDoubleClick={() => startEdit(b)}
-                className={`flex w-full items-center justify-between px-4 py-3 text-left font-mono text-xs ${
-                  b.id === selectedId ? 'bg-foreground text-background' : ''
-                }`}
+                className={`flex w-full items-center justify-between px-4 py-3 text-left font-mono text-xs ${rowClasses(b.id, selectedId, boardStatuses)}`}
               >
                 <span className="truncate">{b.name}</span>
                 <span className="ml-2 flex shrink-0 items-center gap-1.5">

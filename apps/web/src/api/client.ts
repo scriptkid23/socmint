@@ -92,6 +92,12 @@ export interface ScriptNodeData {
   code: string;
 }
 
+export type ResultKind = 'pass' | 'fail';
+
+export interface ResultNodeData {
+  kind: ResultKind;
+}
+
 export type BoardNodeData =
   | ProfileNodeData
   | GotoNodeData
@@ -103,6 +109,7 @@ export type BoardNodeData =
   | ClickNodeData
   | IfNodeData
   | ScriptNodeData
+  | ResultNodeData
   | Record<string, never>;
 
 export interface BoardNode {
@@ -118,7 +125,8 @@ export interface BoardNode {
     | 'fill'
     | 'click'
     | 'if'
-    | 'script';
+    | 'script'
+    | 'result';
   position: { x: number; y: number };
   data: BoardNodeData;
 }
@@ -141,7 +149,18 @@ export interface Board {
 }
 
 export interface FlowStepRecord {
-  type: 'goto' | 'wait' | 'agent' | 'screenshot';
+  type:
+    | 'goto'
+    | 'wait'
+    | 'agent'
+    | 'screenshot'
+    | 'wallet'
+    | 'fill'
+    | 'click'
+    | 'scroll'
+    | 'if'
+    | 'script'
+    | 'result';
   status: 'completed' | 'failed';
   error: string | null;
   title?: string;
@@ -151,6 +170,8 @@ export interface FlowStepRecord {
   stopReason?: 'finished' | 'max-steps' | 'timeout' | 'error';
   result?: unknown;
   transcript?: string;
+  nodeId?: string;
+  kind?: ResultKind;
 }
 export interface FlowRunRecord {
   id: string;

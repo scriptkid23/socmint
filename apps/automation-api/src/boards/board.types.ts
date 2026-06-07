@@ -88,6 +88,12 @@ export interface ScriptNodeData {
   code: string;
 }
 
+export type ResultKind = 'pass' | 'fail';
+
+export interface ResultNodeData {
+  kind: ResultKind;
+}
+
 interface NodeBase {
   id: string;
   position: { x: number; y: number };
@@ -104,7 +110,8 @@ export type BoardNode =
   | (NodeBase & { type: 'fill'; data: FillNodeData })
   | (NodeBase & { type: 'click'; data: ClickNodeData })
   | (NodeBase & { type: 'if'; data: IfNodeData })
-  | (NodeBase & { type: 'script'; data: ScriptNodeData });
+  | (NodeBase & { type: 'script'; data: ScriptNodeData })
+  | (NodeBase & { type: 'result'; data: ResultNodeData });
 
 export interface BoardEdge {
   id: string;

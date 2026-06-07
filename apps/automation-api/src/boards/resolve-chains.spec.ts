@@ -546,4 +546,81 @@ describe('resolveChains', () => {
     );
     expect(() => resolveChains(g)).toThrow(/cycle/i);
   });
+
+  it('compiles a Result node into a result marker step', () => {
+    const g = graph(
+      [
+        { id: 'p', type: 'profile', position: pos, data: { profileId: 'prof-1' } },
+        { id: 'g', type: 'goto', position: pos, data: { url: 'https://e' } },
+        { id: 'r', type: 'result', position: pos, data: { kind: 'pass' } },
+      ],
+      [
+        { id: 'e1', source: 'p', target: 'g' },
+        { id: 'e2', source: 'g', target: 'r' },
+      ],
+    );
+    expect(resolveChains(g)).toEqual([
+      {
+        profileId: 'prof-1',
+        steps: [
+          { type: 'goto', url: 'https://e' },
+          { type: 'result', nodeId: 'r', kind: 'pass' },
+        ],
+      },
+    ]);
+  });
+
+  it('stops traversal after a Result node even if extra edges exist', () => {
+    const g = graph(
+      [
+        { id: 'p', type: 'profile', position: pos, data: { profileId: 'prof-1' } },
+        { id: 'r', type: 'result', position: pos, data: { kind: 'pass' } },
+        { id: 'w', type: 'wait', position: pos, data: { ms: 500 } },
+      ],
+      [
+        { id: 'e1', source: 'p', target: 'r' },
+        { id: 'e2', source: 'r', target: 'w' },
+      ],
+    );
+    expect(resolveChains(g)).toEqual([
+      { profileId: 'prof-1', steps: [{ type: 'result', nodeId: 'r', kind: 'pass' }] },
+    ]);
+  });
+
+  it('includes Result markers inside compiled if branch step lists', () => {
+    const g = graph(
+      [
+        { id: 'p', type: 'profile', position: pos, data: { profileId: 'prof-1' } },
+        { id: 'i', type: 'if', position: pos, data: { selector: '#x', condition: 'exists' } },
+        { id: 'rp', type: 'result', position: pos, data: { kind: 'pass' } },
+        { id: 'rf', type: 'result', position: pos, data: { kind: 'fail' } },
+      ],
+      [
+        { id: 'e1', source: 'p', target: 'i' },
+        { id: 'e2', source: 'i', target: 'rp', sourceHandle: 'true' },
+        { id: 'e3', source: 'i', target: 'rf', sourceHandle: 'false' },
+      ],
+    );
+    const steps = resolveChains(g)[0].steps;
+    expect(steps).toEqual([
+      {
+        type: 'if',
+        selector: '#x',
+        condition: 'exists',
+        thenSteps: [{ type: 'result', nodeId: 'rp', kind: 'pass' }],
+        elseSteps: [{ type: 'result', nodeId: 'rf', kind: 'fail' }],
+      },
+    ]);
+  });
+
+  it('throws when a Result node has an invalid kind', () => {
+    const g = graph(
+      [
+        { id: 'p', type: 'profile', position: pos, data: { profileId: 'prof-1' } },
+        { id: 'r', type: 'result', position: pos, data: { kind: 'invalid' as 'pass' } },
+      ],
+      [{ id: 'e1', source: 'p', target: 'r' }],
+    );
+    expect(() => resolveChains(g)).toThrow(/invalid kind/i);
+  });
 });

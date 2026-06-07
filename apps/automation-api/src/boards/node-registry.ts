@@ -14,6 +14,8 @@ export interface ChainOutput {
   steps: FlowStep[];
   /** Chain ends on this node and the browser should stay open for manual capture. */
   endsWithRecord?: boolean;
+  /** When true, graph traversal must not follow outgoing edges from this node. */
+  terminal?: boolean;
 }
 
 interface ChainDescriptor<N extends BoardNode> {
@@ -212,6 +214,19 @@ export const NODE_CHAIN_REGISTRY: ChainRegistry = {
         throw new BoardGraphError(`Script node ${node.id} has empty code`);
       }
       return { steps: [{ type: 'script', code }] };
+    },
+  },
+
+  result: {
+    toSteps(node) {
+      const kind = node.data.kind ?? 'pass';
+      if (kind !== 'pass' && kind !== 'fail') {
+        throw new BoardGraphError(`Result node ${node.id} has invalid kind ${String(kind)}`);
+      }
+      return {
+        steps: [{ type: 'result', nodeId: node.id, kind }],
+        terminal: true,
+      };
     },
   },
 };

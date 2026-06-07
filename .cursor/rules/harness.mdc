@@ -3,23 +3,45 @@ description: Harness session lifecycle and agent role routing
 alwaysApply: true
 ---
 
-# Harness
+# Harness Lifecycle
 
-Every session:
+## Storage model
+- Harness state lives in the **central harness-manager SQLite DB**, not in this repo.
+- There is no `.harness/` folder and no `AGENTS.md` in this repo.
+- Agent roles, features, decisions, and progress are read via `harness_get_context`.
 
-1. **`harness_get_context`** — read agents, constraints, features from snapshot
-2. **State which harness agent role you are acting as**
-3. **End:** **`harness_handoff`** (clean — no active features)
+## Session lifecycle (never skip)
 
-Agent instructions live in `.harness/agents/` — do not duplicate here.
+### Start of every session
+1. `harness_get_context` with repoPath above
+2. Summarize: hardConstraints, agents, active features, nextSteps, recent decisions
+3. State which harness agent role you are acting as: **planner | coder | reviewer | architect**
+4. Follow that agent's instructions from the snapshot — do NOT duplicate them in chat
 
-Route by user intent:
+### During work
+| User intent | Role | Key tools |
+|-------------|------|-----------|
+| Plan / spec | planner | `harness_update_feature`, `harness_update_progress` |
+| Implement | coder | `harness_update_feature` (active), `harness_update_progress` |
+| Review | reviewer | (read-only + `harness_add_decision` if architectural) |
+| Design / trade-offs | architect | `harness_add_decision`, `harness_update_feature` (spec) |
 
-| Intent | Role |
-|--------|------|
-| plan, design spec, brainstorm | **planner** |
-| implement, code, fix | **coder** |
-| review, check PR | **reviewer** |
-| architecture, trade-off, should we use X | **architect** |
+### Rules (enforced)
+- **WIP=1:** only ONE feature `active` at a time
+- **Never** set a feature to `passing` without real `evidence` (test output / benchmark log)
+- Use `harness_set_feature_passing` for passing — not `harness_update_feature`
+- Every significant architecture choice → `harness_add_decision` (include `rejected` alternative)
+- Respect `hardConstraints` from config — stop and ask if a request violates them
 
-When acting in a role, read `.harness/agents/<role>.md` before working.
+### End of every session
+1. Completed features: run verification → capture output → `harness_set_feature_passing`
+2. Unfinished features: move out of `active` → `not_started` or `blocked`, note in progress
+3. `harness_handoff` with updatedAt, currentCommit, testStatus, completed, nextSteps, summary
+4. **Clean state:** zero features left in `active`. Re-handoff until clean.
+
+## First-time setup (repo not in harness yet)
+If `harness_get_context` fails with "not initialized", run once:
+- `harness_init` (name, description, hardConstraints)
+- `harness_upsert_agent` for planner / coder / reviewer / architect
+- `harness_update_feature` for each planned feature (state: `not_started`, with verification command)
+Then confirm with `harness_get_context`.

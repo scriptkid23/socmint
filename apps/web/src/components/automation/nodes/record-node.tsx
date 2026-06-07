@@ -152,8 +152,16 @@ function ReplayStepRow({
         </select>
       ) : (
         <>
+          {step.type === 'click' && step.text ? (
+            <span
+              className="max-w-20 shrink-0 truncate font-mono text-[9px] text-muted-foreground"
+              title={step.text}
+            >
+              {step.text}
+            </span>
+          ) : null}
           <Input
-            className="h-6 w-24 shrink-0 px-1 text-[10px]"
+            className="h-6 min-w-0 flex-1 px-1 text-[10px]"
             placeholder="selector"
             value={step.selector}
             onChange={(e) => onChange({ ...step, selector: e.target.value })}

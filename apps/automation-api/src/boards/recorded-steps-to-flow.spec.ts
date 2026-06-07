@@ -60,6 +60,24 @@ describe('compileRecordedSteps', () => {
     ]);
   });
 
+  it('replays unstable radix ids via stable id suffix selectors', () => {
+    expect(
+      compileRecordedSteps([
+        {
+          type: 'click',
+          tag: 'button',
+          text: 'NFT Details',
+          href: null,
+          selector: '#radix-_r_a_-trigger-nft-details',
+          at: 't1',
+        },
+      ]),
+    ).toEqual([
+      { type: 'click', selector: 'button[id$="-trigger-nft-details"]' },
+      { type: 'wait', ms: 500 },
+    ]);
+  });
+
   it('throws when a click step has an empty selector', () => {
     expect(() =>
       compileRecordedSteps([

@@ -1,3 +1,4 @@
+import { replayClickSelector } from '@socmint/browser-core';
 import type { FlowStep } from '../runs/run.types';
 import type { RecordedStep } from './board.types';
 import { BoardGraphError } from './board.errors';
@@ -29,7 +30,7 @@ export function compileRecordedSteps(
       out.push({ type: 'goto', url });
       pushDelay();
     } else if (s.type === 'click') {
-      const selector = s.selector?.trim();
+      const selector = replayClickSelector(s);
       if (!selector) throw new BoardGraphError(`Recorded click in ${nodeId} has an empty selector`);
       out.push({ type: 'click', selector });
       pushDelay();

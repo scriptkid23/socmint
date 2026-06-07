@@ -49,7 +49,7 @@ describe('ProfileService', () => {
 
   it('update rejects while a live lock is held', async () => {
     const p = await service.create({ label: 'inv-01' });
-    await lock.acquire(resolve(dataRoot, 'profiles', p.id), 123);
+    await lock.acquire(resolve(dataRoot, 'profiles', p.id), process.pid);
     await expect(service.update(p.id, { label: 'x' })).rejects.toBeInstanceOf(ProfileRunningError);
   });
 
@@ -71,7 +71,7 @@ describe('ProfileService', () => {
 
   it('remove rejects while a live lock is held', async () => {
     const p = await service.create({ label: 'inv-01' });
-    await lock.acquire(resolve(dataRoot, 'profiles', p.id), 123);
+    await lock.acquire(resolve(dataRoot, 'profiles', p.id), process.pid);
     await expect(service.remove(p.id)).rejects.toBeInstanceOf(ProfileRunningError);
   });
 });

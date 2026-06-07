@@ -1,5 +1,6 @@
 export * from './lib/types';
 export * from './lib/recorded-step.types';
+export * from './lib/replay-selector';
 export { InteractionRecorder, RECORD_INIT_SCRIPT } from './lib/interaction-recorder';
 export * from './lib/profile-path.resolver';
 export * from './lib/chromium-singleton-lock';

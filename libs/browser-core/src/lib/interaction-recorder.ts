@@ -6,14 +6,26 @@ export const RECORD_INIT_SCRIPT = `
   if (window.__socmintRecorderInstalled) return;
   window.__socmintRecorderInstalled = true;
 
+  function isStableId(id) {
+    if (!id) return false;
+    if (/^radix-/i.test(id)) return false;
+    if (/^:r[0-9a-z]+:$/i.test(id)) return false;
+    if (/-_r_[a-z0-9]+-/i.test(id)) return false;
+    return true;
+  }
+
   function cssPath(el) {
     if (!el || el.nodeType !== 1) return '';
-    if (el.id) return '#' + CSS.escape(el.id);
+    if (el.id && isStableId(el.id)) return '#' + CSS.escape(el.id);
+    const testId = el.getAttribute('data-testid');
+    if (testId) return '[data-testid="' + CSS.escape(testId) + '"]';
+    const aria = el.getAttribute('aria-label');
+    if (aria) return '[aria-label="' + CSS.escape(aria) + '"]';
     const parts = [];
     let cur = el;
     while (cur && cur.nodeType === 1 && parts.length < 6) {
       let part = cur.tagName.toLowerCase();
-      if (cur.id) {
+      if (cur.id && isStableId(cur.id)) {
         parts.unshift('#' + CSS.escape(cur.id));
         break;
       }
@@ -30,6 +42,29 @@ export const RECORD_INIT_SCRIPT = `
     return parts.join(' > ');
   }
 
+  function radixTriggerSuffix(id) {
+    if (!id) return null;
+    const m = id.match(/-trigger-(.+)$/i);
+    return m ? m[1] : null;
+  }
+
+  function stableRadixTriggerSelector(el, suffix) {
+    const role = el.getAttribute('role');
+    if (role === 'tab') return '[role="tab"][id$="-trigger-' + suffix + '"]';
+    const tag = el.tagName.toLowerCase() || 'button';
+    return tag + '[id$="-trigger-' + suffix + '"]';
+  }
+
+  function buildClickSelector(el) {
+    const suffix = radixTriggerSuffix(el.id);
+    if (suffix) return stableRadixTriggerSelector(el, suffix);
+    const text = (el.innerText || el.getAttribute('aria-label') || '').trim().slice(0, 200);
+    const path = cssPath(el);
+    if (text && el.id && !isStableId(el.id)) return 'text=' + text;
+    if (text && /^#radix-/i.test(path)) return 'text=' + text;
+    return path || (text ? 'text=' + text : '');
+  }
+
   function push(payload) {
     if (typeof window.socmintRecord === 'function') {
       window.socmintRecord(payload);
@@ -40,7 +75,9 @@ export const RECORD_INIT_SCRIPT = `
     'click',
     (e) => {
       const el = e.target && e.target.closest
-        ? e.target.closest('a, button, input, textarea, select, [role="button"], [role="link"]')
+        ? e.target.closest(
+            'a, button, input, textarea, select, [role="button"], [role="link"], [role="tab"]',
+          )
         : null;
       if (!el) return;
       push({
@@ -48,7 +85,7 @@ export const RECORD_INIT_SCRIPT = `
         tag: el.tagName.toLowerCase(),
         text: (el.innerText || el.getAttribute('aria-label') || '').trim().slice(0, 200),
         href: el.tagName === 'A' ? el.href : null,
-        selector: cssPath(el),
+        selector: buildClickSelector(el),
       });
     },
     true,

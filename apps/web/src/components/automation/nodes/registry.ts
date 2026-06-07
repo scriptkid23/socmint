@@ -1,4 +1,5 @@
 import type { Edge, Node, NodeTypes } from '@xyflow/react';
+import { normalizeRecordedSteps } from '../../../lib/replay-selector';
 import {
   api,
   type AgentNodeData,
@@ -239,19 +240,21 @@ export const NODE_DESCRIPTORS: NodeRegistry = {
     }),
     serialize: (d) => ({
       mode: (d.mode as RecordNodeMode) ?? 'record',
-      steps: (d.steps as RecordedStep[]) ?? [],
+      steps: normalizeRecordedSteps((d.steps as RecordedStep[]) ?? []),
       replayDelayMs: normalizeReplayDelay(d.replayDelayMs),
     }),
     inject: (d, ctx) => {
       const profileId = resolveUpstreamProfile(ctx.id, ctx.getNodes(), ctx.getEdges());
+      const steps = normalizeRecordedSteps((d.steps as RecordedStep[]) ?? []);
       return {
         mode: (d.mode as RecordNodeMode) ?? 'record',
-        steps: (d.steps as RecordedStep[]) ?? [],
+        steps,
         replayDelayMs: normalizeReplayDelay(d.replayDelayMs),
         profileId,
         recording: Boolean(d.recording),
         onSetMode: (mode: RecordNodeMode) => ctx.patch({ mode }),
-        onChangeSteps: (steps: RecordedStep[]) => ctx.patch({ steps }),
+        onChangeSteps: (steps: RecordedStep[]) =>
+          ctx.patch({ steps: normalizeRecordedSteps(steps) }),
         onChangeDelay: (replayDelayMs: number) => ctx.patch({ replayDelayMs }),
         onStart: async () => {
           if (!profileId) return;
@@ -262,9 +265,12 @@ export const NODE_DESCRIPTORS: NodeRegistry = {
           if (!profileId) return;
           try {
             const { steps } = await api.stopRecording(profileId);
-            ctx.patch({ steps, recording: false });
+            const normalized = normalizeRecordedSteps(steps);
+            ctx.patch({ steps: normalized, recording: false });
             const nextNodes = ctx.getNodes().map((n) =>
-              n.id === ctx.id ? { ...n, data: { ...n.data, steps, recording: false } } : n,
+              n.id === ctx.id
+                ? { ...n, data: { ...n.data, steps: normalized, recording: false } }
+                : n,
             );
             await ctx.persistNodes(nextNodes);
           } catch {

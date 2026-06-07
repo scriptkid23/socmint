@@ -113,7 +113,7 @@ describe('RunService.execute', () => {
   it('throws ProfileBusyError when the profile is already locked', async () => {
     const { runs, profiles, lock, dataRoot, artifactsRoot } = await harness();
     const p = await profiles.create({ label: 'inv-01' });
-    await lock.acquire(resolve(dataRoot, 'profiles', p.id), 999);
+    await lock.acquire(resolve(dataRoot, 'profiles', p.id), process.pid);
     await expect(runs.execute(p.id, { url: 'https://example.com' })).rejects.toBeInstanceOf(
       ProfileBusyError,
     );

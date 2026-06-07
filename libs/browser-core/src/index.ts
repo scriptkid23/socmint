@@ -2,6 +2,8 @@ export * from './lib/types';
 export * from './lib/recorded-step.types';
 export { InteractionRecorder, RECORD_INIT_SCRIPT } from './lib/interaction-recorder';
 export * from './lib/profile-path.resolver';
+export * from './lib/chromium-singleton-lock';
+export { isProcessAlive } from './lib/process-alive';
 export * from './lib/cloak-browser.service';
 export * from './lib/cloak-browser.launcher';
 export * from './lib/cloak-browser.module';

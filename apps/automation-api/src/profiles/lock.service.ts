@@ -1,3 +1,4 @@
+import { isProcessAlive } from '@socmint/browser-core';
 import { open, readFile, readdir, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
@@ -30,6 +31,7 @@ export class LockService {
   }
 
   private isStale(lock: LockFile): boolean {
+    if (!isProcessAlive(lock.pid)) return true;
     const started = Date.parse(lock.startedAt);
     if (Number.isNaN(started)) return true;
     return Date.now() - started > this.ttlMs;
@@ -38,7 +40,10 @@ export class LockService {
   async acquire(profileDir: string, pid: number): Promise<void> {
     const path = this.lockPath(profileDir);
     const existing = await this.readLock(path);
-    if (existing && this.isStale(existing)) {
+    if (existing) {
+      if (isProcessAlive(existing.pid) && !this.isStale(existing)) {
+        throw new ProfileBusyError();
+      }
       await rm(path, { force: true });
     }
     try {
@@ -57,7 +62,9 @@ export class LockService {
 
   async isLocked(profileDir: string): Promise<boolean> {
     const lock = await this.readLock(this.lockPath(profileDir));
-    return lock !== null && !this.isStale(lock);
+    if (!lock) return false;
+    if (!isProcessAlive(lock.pid)) return false;
+    return !this.isStale(lock);
   }
 
   async clearStaleUnder(profilesRoot: string): Promise<void> {

@@ -1,3 +1,4 @@
+import { ensureChromiumUserDataAvailable } from './chromium-singleton-lock';
 import type { BrowserContextLike, BrowserLauncher, LaunchOptions } from './types';
 
 type CloakModule = typeof import('cloakbrowser');
@@ -31,6 +32,8 @@ export class CloakBrowserLauncher implements BrowserLauncher {
     if (typeof opts['headless'] === 'boolean') launchArgs.headless = opts['headless'];
     if (opts['proxy']) launchArgs.proxy = opts['proxy'] as string;
     if (opts['geoip']) launchArgs.geoip = opts['geoip'] as boolean;
+
+    await ensureChromiumUserDataAvailable(opts.userDataDir);
 
     const context = await launchPersistentContext(launchArgs);
     return context as unknown as BrowserContextLike;

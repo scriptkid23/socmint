@@ -8,6 +8,198 @@ export interface Profile {
   updatedAt: string;
 }
 
+export type WaitUntil = 'load' | 'domcontentloaded' | 'commit';
+
+export interface ProfileNodeData {
+  profileId: string | null;
+}
+export interface GotoNodeData {
+  url: string;
+  waitUntil?: WaitUntil;
+  timeoutMs?: number;
+}
+export interface WaitNodeData {
+  ms: number;
+}
+export type AgentProvider = 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'openrouter';
+export interface AgentNodeData {
+  prompt: string;
+  provider: AgentProvider;
+  model: string;
+  apiKey: string;
+  baseUrl?: string;
+  maxSteps?: number;
+  timeoutMs?: number;
+  allowDomains?: string[];
+  restrictToGotoDomains?: boolean;
+  readOnly?: boolean;
+}
+export type RecordedStep =
+  | { type: 'navigate'; url: string; title?: string; at: string }
+  | {
+      type: 'click';
+      tag: string;
+      text: string;
+      href: string | null;
+      selector: string;
+      at: string;
+    }
+  | {
+      type: 'type';
+      tag: string;
+      text: string;
+      selector: string;
+      value: string;
+      at: string;
+    }
+  | { type: 'scroll'; direction: 'up' | 'down'; at: string };
+
+export type RecordNodeMode = 'record' | 'replay';
+
+export interface RecordNodeData {
+  mode?: RecordNodeMode;
+  steps: RecordedStep[];
+  /** Replay-only: delay inserted after each step (ms). Missing → 500. */
+  replayDelayMs?: number;
+}
+
+export interface ChainConfig {
+  chainId: number;
+  rpcUrl: string;
+  name: string;
+}
+export interface MetaMaskNodeData {
+  privateKey: string;
+  chains: ChainConfig[];
+  activeChainId: number;
+}
+export interface FillNodeData {
+  selector: string;
+  value: string;
+}
+export interface ClickNodeData {
+  selector: string;
+}
+
+export type IfCondition = 'exists' | 'not_exists';
+
+export interface IfNodeData {
+  selector: string;
+  condition: IfCondition;
+}
+
+export interface ScriptNodeData {
+  code: string;
+}
+
+export type ResultKind = 'pass' | 'fail';
+
+export interface ResultNodeData {
+  kind: ResultKind;
+}
+
+export type BoardNodeData =
+  | ProfileNodeData
+  | GotoNodeData
+  | WaitNodeData
+  | AgentNodeData
+  | RecordNodeData
+  | MetaMaskNodeData
+  | FillNodeData
+  | ClickNodeData
+  | IfNodeData
+  | ScriptNodeData
+  | ResultNodeData
+  | Record<string, never>;
+
+export interface BoardNode {
+  id: string;
+  type:
+    | 'profile'
+    | 'goto'
+    | 'wait'
+    | 'agent'
+    | 'screenshot'
+    | 'record'
+    | 'metamask'
+    | 'fill'
+    | 'click'
+    | 'if'
+    | 'script'
+    | 'result';
+  position: { x: number; y: number };
+  data: BoardNodeData;
+}
+export interface BoardEdge {
+  id: string;
+  source: string;
+  target: string;
+  sourceHandle?: 'true' | 'false';
+}
+export interface BoardGraph {
+  nodes: BoardNode[];
+  edges: BoardEdge[];
+}
+export interface Board {
+  id: string;
+  name: string;
+  graph: BoardGraph;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FlowStepRecord {
+  type:
+    | 'goto'
+    | 'wait'
+    | 'agent'
+    | 'screenshot'
+    | 'wallet'
+    | 'fill'
+    | 'click'
+    | 'scroll'
+    | 'if'
+    | 'script'
+    | 'result';
+  status: 'completed' | 'failed';
+  error: string | null;
+  title?: string;
+  finalUrl?: string;
+  screenshot?: string | null;
+  stepsUsed?: number;
+  stopReason?: 'finished' | 'max-steps' | 'timeout' | 'error';
+  result?: unknown;
+  transcript?: string;
+  nodeId?: string;
+  kind?: ResultKind;
+}
+export interface FlowRunRecord {
+  id: string;
+  profileId: string;
+  status: 'completed' | 'failed';
+  startedAt: string;
+  finishedAt: string;
+  error: string | null;
+  steps: FlowStepRecord[];
+}
+export interface BoardRunRecord {
+  id: string;
+  boardId: string;
+  startedAt: string;
+  finishedAt: string;
+  runs: FlowRunRecord[];
+}
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
     headers: { 'Content-Type': 'application/json' },
@@ -21,7 +213,7 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       /* ignore */
     }
-    throw new Error(message);
+    throw new ApiError(message, res.status);
   }
   return (res.status === 204 ? undefined : await res.json()) as T;
 }
@@ -40,4 +232,25 @@ export const api = {
     }),
   closeLoginSession: (id: string) =>
     req<void>(`/profiles/${id}/login-session`, { method: 'DELETE' }),
+  startRecording: (profileId: string) =>
+    req<{ sessionId: string; status: 'recording' }>(`/profiles/${profileId}/recording-session`, {
+      method: 'POST',
+    }),
+  getRecording: (profileId: string) =>
+    req<{ sessionId: string; status: 'recording'; steps: RecordedStep[] }>(
+      `/profiles/${profileId}/recording-session`,
+    ),
+  stopRecording: (profileId: string) =>
+    req<{ steps: RecordedStep[] }>(`/profiles/${profileId}/recording-session`, {
+      method: 'DELETE',
+    }),
+  listBoards: () => req<Board[]>('/boards'),
+  getBoard: (id: string) => req<Board>(`/boards/${id}`),
+  createBoard: (body: { name: string }) =>
+    req<Board>('/boards', { method: 'POST', body: JSON.stringify(body) }),
+  updateBoard: (id: string, body: { name?: string; graph?: BoardGraph }) =>
+    req<Board>(`/boards/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteBoard: (id: string) => req<void>(`/boards/${id}`, { method: 'DELETE' }),
+  runBoard: (id: string) =>
+    req<BoardRunRecord>(`/boards/${id}/run`, { method: 'POST' }),
 };

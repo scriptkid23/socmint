@@ -1,0 +1,55 @@
+---
+description: CodeGraph MCP usage guide — mandatory for codebase exploration; stop on error
+alwaysApply: true
+---
+<!-- CODEGRAPH_START -->
+## CodeGraph
+
+This project has a CodeGraph MCP server (`codegraph_*` tools) configured. CodeGraph is a tree-sitter-parsed knowledge graph of every symbol, edge, and file. Reads are sub-millisecond and return structural information grep cannot.
+
+### Mandatory: use CodeGraph to read the codebase
+
+Agents **must** use CodeGraph MCP (`codegraph_*` tools) for all structural codebase exploration — symbols, call graphs, architecture, file layout, and source context.
+
+Do **not** substitute grep, SemanticSearch, Read loops, or `explore` subagents when CodeGraph can answer the question.
+
+| Question | Tool |
+|---|---|
+| "Where is X defined?" / "Find symbol named X" | `codegraph_search` |
+| "What calls function Y?" | `codegraph_callers` |
+| "What does Y call?" | `codegraph_callees` |
+| "What would break if I changed Z?" | `codegraph_impact` |
+| "Show me Y's signature / source / docstring" | `codegraph_node` |
+| "Give me focused context for a task/area" | `codegraph_context` |
+| "See several related symbols' source at once" | `codegraph_explore` |
+| "What files exist under path/" | `codegraph_files` |
+| "Is the index healthy?" | `codegraph_status` |
+
+### On CodeGraph error — STOP
+
+If any `codegraph_*` call fails (MCP unavailable, "not initialized", tool error, timeout, or empty/unhealthy index):
+
+1. **Stop** the current task immediately — do not continue with workarounds.
+2. Report the exact error to the user.
+3. Do **not** fallback to grep, SemanticSearch, Read, or explore subagents.
+4. Wait for the user to fix CodeGraph before resuming.
+
+### Allowed exceptions (not errors)
+
+- **Literal text only**: grep/read for string contents, comments, or log messages — only when the question is not structural and CodeGraph is healthy (not when CodeGraph failed).
+- **Active edits**: Read a file you are actively editing (index lags ~1s behind writes).
+- **Non-code files**: docs and config without symbols — read directly.
+
+### Rules of thumb
+
+- **Answer directly — don't delegate exploration.** For "how does X work" / architecture / trace questions, answer with 2-3 codegraph calls: `codegraph_context` first, then ONE `codegraph_explore` for the source of the symbols it surfaces. Codegraph IS the pre-built index, so spawning a separate file-reading sub-task/agent — or running a grep + read loop — repeats work codegraph already did and costs more for the same answer.
+- **Trust codegraph results.** They come from a full AST parse. Do NOT re-verify them with grep — that's slower, less accurate, and wastes context.
+- **Don't grep first** when looking up a symbol by name. `codegraph_search` is faster and returns kind + location + signature in one call.
+- **Don't chain `codegraph_search` + `codegraph_node`** when you just want context — `codegraph_context` is one call.
+- **Don't loop `codegraph_node` over many symbols** — one `codegraph_explore` call returns several symbols' source grouped in a single capped call, while each separate node/Read call re-reads the whole context and costs far more.
+- **Index lag**: the file watcher debounces ~500ms behind writes; don't re-query immediately after editing a file in the same turn.
+
+### If `.codegraph/` doesn't exist
+
+CodeGraph returns "not initialized." **Stop** and tell the user: *"CodeGraph is not initialized. Run `codegraph init -i` or fix MCP config before continuing."* Do not proceed with grep or other fallbacks.
+<!-- CODEGRAPH_END -->

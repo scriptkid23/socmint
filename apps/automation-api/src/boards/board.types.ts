@@ -1,0 +1,143 @@
+import type { WaitUntil } from '@socmint/browser-core';
+import type { FlowRunRecord } from '../runs/run.types';
+
+export interface ProfileNodeData {
+  profileId: string | null;
+}
+export interface GotoNodeData {
+  url: string;
+  waitUntil?: WaitUntil;
+  timeoutMs?: number;
+}
+export interface WaitNodeData {
+  ms: number;
+}
+export type AgentProvider = 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'openrouter';
+export interface AgentNodeData {
+  prompt: string;
+  provider: AgentProvider;
+  model: string;
+  apiKey: string;
+  /** Ollama base URL (default http://127.0.0.1:11434). */
+  baseUrl?: string;
+  maxSteps?: number;
+  timeoutMs?: number;
+  allowDomains?: string[];
+  /** When true, agent may only navigate to hosts from prior Goto nodes (blocks opening external result links via navigate). */
+  restrictToGotoDomains?: boolean;
+  readOnly?: boolean;
+}
+export type ScreenshotNodeData = Record<string, never>;
+
+export type RecordedStep =
+  | { type: 'navigate'; url: string; title?: string; at: string }
+  | {
+      type: 'click';
+      tag: string;
+      text: string;
+      href: string | null;
+      selector: string;
+      at: string;
+    }
+  | {
+      type: 'type';
+      tag: string;
+      text: string;
+      selector: string;
+      value: string;
+      at: string;
+    }
+  | { type: 'scroll'; direction: 'up' | 'down'; at: string };
+
+export type RecordNodeMode = 'record' | 'replay';
+
+export interface RecordNodeData {
+  /** Optional for backward-compat with boards saved before replay mode; missing → 'record'. */
+  mode?: RecordNodeMode;
+  steps: RecordedStep[];
+  /** Replay-only: delay inserted after each step (ms). Missing → 500. */
+  replayDelayMs?: number;
+}
+
+export interface ChainConfig {
+  chainId: number;
+  rpcUrl: string;
+  name: string;
+}
+export interface MetaMaskNodeData {
+  privateKey: string;
+  chains: ChainConfig[];
+  activeChainId: number;
+}
+export interface FillNodeData {
+  selector: string;
+  value: string;
+}
+export interface ClickNodeData {
+  selector: string;
+}
+
+export type IfCondition = 'exists' | 'not_exists';
+
+export interface IfNodeData {
+  selector: string;
+  condition: IfCondition;
+}
+
+export interface ScriptNodeData {
+  code: string;
+}
+
+export type ResultKind = 'pass' | 'fail';
+
+export interface ResultNodeData {
+  kind: ResultKind;
+}
+
+interface NodeBase {
+  id: string;
+  position: { x: number; y: number };
+}
+
+export type BoardNode =
+  | (NodeBase & { type: 'profile'; data: ProfileNodeData })
+  | (NodeBase & { type: 'goto'; data: GotoNodeData })
+  | (NodeBase & { type: 'wait'; data: WaitNodeData })
+  | (NodeBase & { type: 'agent'; data: AgentNodeData })
+  | (NodeBase & { type: 'screenshot'; data: ScreenshotNodeData })
+  | (NodeBase & { type: 'record'; data: RecordNodeData })
+  | (NodeBase & { type: 'metamask'; data: MetaMaskNodeData })
+  | (NodeBase & { type: 'fill'; data: FillNodeData })
+  | (NodeBase & { type: 'click'; data: ClickNodeData })
+  | (NodeBase & { type: 'if'; data: IfNodeData })
+  | (NodeBase & { type: 'script'; data: ScriptNodeData })
+  | (NodeBase & { type: 'result'; data: ResultNodeData });
+
+export interface BoardEdge {
+  id: string;
+  source: string;
+  target: string;
+  /** Branch handle from an If node (`true` / `false`). Omitted on linear edges. */
+  sourceHandle?: 'true' | 'false';
+}
+
+export interface BoardGraph {
+  nodes: BoardNode[];
+  edges: BoardEdge[];
+}
+
+export interface BoardRecord {
+  id: string;
+  name: string;
+  graph: BoardGraph;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BoardRunRecord {
+  id: string;
+  boardId: string;
+  startedAt: string;
+  finishedAt: string;
+  runs: FlowRunRecord[];
+}

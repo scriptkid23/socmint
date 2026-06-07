@@ -6,11 +6,84 @@ import {
   resolveProfileDir,
   resolveUserDataDir,
 } from '@socmint/browser-core';
-import type { LaunchOptions, RunPageOptions } from '@socmint/browser-core';
+import type { LaunchOptions, RunPageOptions, ResolvedFlowStep } from '@socmint/browser-core';
 import { LockService } from '../profiles/lock.service';
 import { ProfileService } from '../profiles/profile.service';
 import { AuditLogger } from './audit.logger';
-import type { RunRecord } from './run.types';
+import type { RecordingRegistry } from '../recordings/recording.registry';
+import type { RunRecord, FlowStep, FlowStepRecord, FlowRunRecord } from './run.types';
+
+export interface ExecuteFlowOptions {
+  endsWithRecord?: boolean;
+  recordings?: RecordingRegistry;
+}
+
+function resolveFlowSteps(
+  steps: FlowStep[],
+  runDir: string,
+  seq: { n: number },
+): ResolvedFlowStep[] {
+  const out: ResolvedFlowStep[] = [];
+  for (const step of steps) {
+    if (step.type === 'screenshot') {
+      out.push({ type: 'screenshot', screenshotPath: resolve(runDir, `step-${seq.n++}.png`) });
+    } else if (step.type === 'wait') {
+      out.push({ type: 'wait', ms: step.ms });
+    } else if (step.type === 'if') {
+      out.push({
+        type: 'if',
+        selector: step.selector,
+        condition: step.condition,
+        thenSteps: resolveFlowSteps(step.thenSteps, runDir, seq),
+        elseSteps: resolveFlowSteps(step.elseSteps, runDir, seq),
+      });
+    } else if (step.type === 'script') {
+      out.push({ type: 'script', code: step.code });
+    } else if (step.type === 'agent') {
+      const i = seq.n++;
+      out.push({
+        type: 'agent',
+        task: {
+          prompt: step.prompt,
+          provider: step.provider,
+          model: step.model,
+          apiKey: step.apiKey,
+          baseUrl: step.baseUrl,
+        },
+        limits: {
+          maxSteps: step.maxSteps ?? 25,
+          timeoutMs: step.timeoutMs ?? 300_000,
+          allowDomains: step.allowDomains ?? [],
+          readOnly: step.readOnly ?? true,
+        },
+        transcriptPath: resolve(runDir, `step-${i}-agent-transcript.json`),
+      });
+    } else if (step.type === 'wallet') {
+      out.push({
+        type: 'wallet',
+        privateKey: step.privateKey,
+        chains: step.chains,
+        activeChainId: step.activeChainId,
+      });
+    } else if (step.type === 'fill') {
+      out.push({ type: 'fill', selector: step.selector, value: step.value });
+    } else if (step.type === 'click') {
+      out.push({ type: 'click', selector: step.selector });
+    } else if (step.type === 'scroll') {
+      out.push({ type: 'scroll', direction: step.direction });
+    } else if (step.type === 'result') {
+      out.push({ type: 'result', nodeId: step.nodeId, kind: step.kind });
+    } else {
+      out.push({
+        type: 'goto',
+        url: step.url,
+        waitUntil: step.waitUntil,
+        timeoutMs: step.timeoutMs,
+      });
+    }
+  }
+  return out;
+}
 
 export interface RunRequest {
   url: string;
@@ -97,6 +170,122 @@ export class RunService {
       profileId,
       runId,
       url: req.url,
+      timestamp: startedAt,
+    });
+
+    return record;
+  }
+
+  async executeFlow(
+    profileId: string,
+    steps: FlowStep[],
+    options?: ExecuteFlowOptions,
+  ): Promise<FlowRunRecord> {
+    const profile = await this.profiles.get(profileId);
+    const profileDir = resolveProfileDir(this.dataRoot, profileId);
+    const endsWithRecord = options?.endsWithRecord === true;
+
+    await this.lock.acquire(profileDir, process.pid);
+
+    const runId = randomUUID();
+    const startedAt = new Date().toISOString();
+    const runDir = this.runDir(runId);
+    await mkdir(runDir, { recursive: true });
+
+    const launch: LaunchOptions = {
+      userDataDir: resolveUserDataDir(this.dataRoot, profileId),
+      headless: endsWithRecord ? false : profile.launchDefaults.headless,
+      geoip: profile.launchDefaults.geoip,
+      proxy: profile.proxy,
+    };
+
+    const resolved = resolveFlowSteps(steps, runDir, { n: 0 });
+
+    let record: FlowRunRecord;
+    let keepRecording = false;
+    try {
+      if (endsWithRecord) {
+        await this.profiles.setStatus(profileId, 'authenticating');
+      }
+      const flow = await this.browser.runFlow(launch, resolved, undefined, {
+        keepOpenForRecording: endsWithRecord,
+      });
+      const stepResults = flow.results;
+      if (endsWithRecord && flow.recordingSession && options?.recordings) {
+        await options.recordings.registerFromFlow(profileId, flow.recordingSession);
+        keepRecording = true;
+      }
+      const stepRecords: FlowStepRecord[] = stepResults.map((r, i) => {
+        if (r.type === 'agent') {
+          return {
+            type: 'agent',
+            status: r.status,
+            error: r.error,
+            stepsUsed: r.stepsUsed,
+            stopReason: r.stopReason,
+            result: r.result,
+            transcript: r.transcriptPath ? `runs/${runId}/step-${i}-agent-transcript.json` : undefined,
+          };
+        }
+        if (r.type === 'result') {
+          return {
+            type: 'result',
+            status: r.status,
+            error: r.error,
+            nodeId: r.nodeId,
+            kind: r.kind,
+          };
+        }
+        return {
+          type: r.type,
+          status: r.status,
+          error: r.error,
+          title: r.type === 'goto' ? r.title : undefined,
+          finalUrl: r.type === 'goto' ? r.finalUrl : undefined,
+          screenshot:
+            r.type === 'screenshot'
+              ? r.status === 'completed'
+                ? `runs/${runId}/step-${i}.png`
+                : null
+              : undefined,
+        };
+      });
+      const failed = stepResults.find((r) => r.status === 'failed');
+      record = {
+        id: runId,
+        profileId,
+        status: failed ? 'failed' : 'completed',
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        error: failed?.error ?? null,
+        steps: stepRecords,
+      };
+    } catch (err) {
+      record = {
+        id: runId,
+        profileId,
+        status: 'failed',
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        error: err instanceof Error ? err.message : String(err),
+        steps: [],
+      };
+    } finally {
+      if (!keepRecording) {
+        await this.lock.release(profileDir);
+        if (endsWithRecord) {
+          await this.profiles.setStatus(profileId, 'idle').catch(() => undefined);
+        }
+      }
+    }
+
+    await writeFile(resolve(runDir, 'result.json'), JSON.stringify(record, null, 2), 'utf8');
+    const firstGoto = steps.find((s): s is Extract<FlowStep, { type: 'goto' }> => s.type === 'goto');
+    const hasAgent = steps.some((s) => s.type === 'agent');
+    await this.audit.append({
+      profileId,
+      runId,
+      url: firstGoto?.url ?? (hasAgent ? 'agent' : 'flow'),
       timestamp: startedAt,
     });
 

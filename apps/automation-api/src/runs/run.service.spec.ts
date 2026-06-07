@@ -46,6 +46,12 @@ class FakeContext implements BrowserContextLike {
   async close() {
     /* noop */
   }
+  async addInitScript() {
+    /* noop */
+  }
+  async exposeFunction() {
+    /* noop */
+  }
 }
 
 class FakeLauncher implements BrowserLauncher {
@@ -134,5 +140,219 @@ describe('RunService.execute', () => {
     expect(await runs.getRun('missing')).toBeNull();
     await rm(dataRoot, { recursive: true, force: true });
     await rm(artifactsRoot, { recursive: true, force: true });
+  });
+});
+
+describe('RunService.executeFlow', () => {
+  let dataRoot: string;
+  let artifactsRoot: string;
+  let profiles: ProfileService;
+  let lock: LockService;
+
+  beforeEach(async () => {
+    dataRoot = await mkdtemp(join(tmpdir(), 'rs-data-'));
+    artifactsRoot = await mkdtemp(join(tmpdir(), 'rs-art-'));
+    const store = new ProfileStore(dataRoot);
+    lock = new LockService(60000);
+    profiles = new ProfileService(store, lock, dataRoot);
+  });
+
+  afterEach(async () => {
+    await rm(dataRoot, { recursive: true, force: true });
+    await rm(artifactsRoot, { recursive: true, force: true });
+  });
+
+  function service(browser: Pick<CloakBrowserService, 'runFlow'>) {
+    return new RunService(
+      profiles,
+      lock,
+      browser as unknown as CloakBrowserService,
+      new AuditLogger(artifactsRoot),
+      dataRoot,
+      artifactsRoot,
+    );
+  }
+
+  it('runs a multi-step chain, writes result.json, maps screenshot to a relative path', async () => {
+    const profile = await profiles.create({ label: 'p1' });
+    const browser = {
+      runFlow: jest.fn().mockResolvedValue({ results: [
+        { type: 'goto', status: 'completed', error: null, title: 'T', finalUrl: 'https://e/' },
+        { type: 'screenshot', status: 'completed', error: null, screenshotPath: '/ignored.png' },
+      ] }),
+    };
+    const svc = service(browser);
+
+    const rec = await svc.executeFlow(profile.id, [
+      { type: 'goto', url: 'https://e' },
+      { type: 'screenshot' },
+    ]);
+
+    expect(rec.status).toBe('completed');
+    expect(rec.steps).toHaveLength(2);
+    expect(rec.steps[1].screenshot).toBe(`runs/${rec.id}/step-1.png`);
+    const saved = JSON.parse(await readFile(resolve(artifactsRoot, 'runs', rec.id, 'result.json'), 'utf8'));
+    expect(saved.id).toBe(rec.id);
+    expect(await lock.isLocked(resolve(dataRoot, 'profiles', profile.id))).toBe(false);
+  });
+
+  it('marks the record failed when a step fails', async () => {
+    const profile = await profiles.create({ label: 'p2' });
+    const browser = {
+      runFlow: jest.fn().mockResolvedValue({ results: [
+        { type: 'goto', status: 'failed', error: 'nav boom', title: undefined, finalUrl: undefined },
+      ] }),
+    };
+    const svc = service(browser);
+
+    const rec = await svc.executeFlow(profile.id, [{ type: 'goto', url: 'https://e' }]);
+
+    expect(rec.status).toBe('failed');
+    expect(rec.error).toBe('nav boom');
+  });
+
+  it('maps agent step results without apiKey in saved record', async () => {
+    const profile = await profiles.create({ label: 'p-agent' });
+    const browser = {
+      runFlow: jest.fn().mockResolvedValue({ results: [
+        {
+          type: 'agent',
+          status: 'completed',
+          error: null,
+          stepsUsed: 2,
+          stopReason: 'finished',
+          result: { items: [] },
+          transcriptPath: '/tmp/transcript.json',
+        },
+      ] }),
+    };
+    const svc = service(browser);
+    const rec = await svc.executeFlow(profile.id, [
+      {
+        type: 'agent',
+        prompt: 'task',
+        provider: 'openai',
+        model: 'gpt-4o-mini',
+        apiKey: 'sk-secret',
+      },
+    ]);
+    expect(rec.steps[0]).toMatchObject({
+      type: 'agent',
+      status: 'completed',
+      result: { items: [] },
+      stepsUsed: 2,
+    });
+    const saved = JSON.parse(
+      await readFile(resolve(artifactsRoot, 'runs', rec.id, 'result.json'), 'utf8'),
+    );
+    expect(JSON.stringify(saved)).not.toContain('sk-secret');
+  });
+
+  it('produces a failed record (and releases the lock) when launch throws', async () => {
+    const profile = await profiles.create({ label: 'p3' });
+    const browser = { runFlow: jest.fn().mockRejectedValue(new Error('launch boom')) };
+    const svc = service(browser);
+
+    const rec = await svc.executeFlow(profile.id, [{ type: 'goto', url: 'https://e' }]);
+
+    expect(rec.status).toBe('failed');
+    expect(rec.error).toBe('launch boom');
+    expect(rec.steps).toEqual([]);
+    expect(await lock.isLocked(resolve(dataRoot, 'profiles', profile.id))).toBe(false);
+  });
+
+  it('forwards a fill step to runFlow unchanged', async () => {
+    const profile = await profiles.create({ label: 'p-fill' });
+    const browser = {
+      runFlow: jest.fn().mockResolvedValue({ results: [
+        { type: 'fill', status: 'completed', error: null },
+      ] }),
+    };
+    const svc = service(browser);
+
+    await svc.executeFlow(profile.id, [
+      { type: 'fill', selector: '#email', value: 'hi@example.com' },
+    ]);
+
+    const resolved = browser.runFlow.mock.calls[0][1];
+    expect(resolved).toEqual([{ type: 'fill', selector: '#email', value: 'hi@example.com' }]);
+  });
+
+  it('forwards a click step to runFlow unchanged', async () => {
+    const profile = await profiles.create({ label: 'p-click' });
+    const browser = {
+      runFlow: jest.fn().mockResolvedValue({ results: [
+        { type: 'click', status: 'completed', error: null },
+      ] }),
+    };
+    const svc = service(browser);
+
+    await svc.executeFlow(profile.id, [{ type: 'click', selector: 'button.submit' }]);
+
+    const resolved = browser.runFlow.mock.calls[0][1];
+    expect(resolved).toEqual([{ type: 'click', selector: 'button.submit' }]);
+  });
+
+  it('forwards a wallet step to runFlow unchanged', async () => {
+    const profile = await profiles.create({ label: 'p-wallet' });
+    const browser = {
+      runFlow: jest.fn().mockResolvedValue({ results: [
+        { type: 'wallet', status: 'completed', error: null },
+      ] }),
+    };
+    const svc = service(browser);
+
+    await svc.executeFlow(profile.id, [
+      {
+        type: 'wallet',
+        privateKey: '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
+        chains: [{ chainId: 1, rpcUrl: 'https://eth.example', name: 'Ethereum' }],
+        activeChainId: 1,
+      },
+    ]);
+
+    const resolved = browser.runFlow.mock.calls[0][1];
+    expect(resolved).toEqual([
+      {
+        type: 'wallet',
+        privateKey: '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
+        chains: [{ chainId: 1, rpcUrl: 'https://eth.example', name: 'Ethereum' }],
+        activeChainId: 1,
+      },
+    ]);
+  });
+
+  it('preserves result marker records without failing the run when kind is fail', async () => {
+    const profile = await profiles.create({ label: 'p-result' });
+    const browser = {
+      runFlow: jest.fn().mockResolvedValue({
+        results: [
+          { type: 'goto', status: 'completed', error: null, title: 'T', finalUrl: 'https://e/' },
+          {
+            type: 'result',
+            status: 'completed',
+            error: null,
+            nodeId: 'r1',
+            kind: 'fail',
+          },
+        ],
+      }),
+    };
+    const svc = service(browser);
+
+    const rec = await svc.executeFlow(profile.id, [
+      { type: 'goto', url: 'https://e' },
+      { type: 'result', nodeId: 'r1', kind: 'fail' },
+    ]);
+
+    expect(rec.status).toBe('completed');
+    expect(rec.steps.find((s) => s.type === 'result')).toMatchObject({
+      type: 'result',
+      status: 'completed',
+      nodeId: 'r1',
+      kind: 'fail',
+    });
+    const resolved = browser.runFlow.mock.calls[0][1];
+    expect(resolved[1]).toEqual({ type: 'result', nodeId: 'r1', kind: 'fail' });
   });
 });

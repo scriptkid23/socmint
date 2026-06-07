@@ -1,0 +1,25 @@
+---
+description: Harness session lifecycle and agent role routing
+alwaysApply: true
+---
+
+# Harness
+
+Every session:
+
+1. **`harness_get_context`** — read agents, constraints, features from snapshot
+2. **State which harness agent role you are acting as**
+3. **End:** **`harness_handoff`** (clean — no active features)
+
+Agent instructions live in `.harness/agents/` — do not duplicate here.
+
+Route by user intent:
+
+| Intent | Role |
+|--------|------|
+| plan, design spec, brainstorm | **planner** |
+| implement, code, fix | **coder** |
+| review, check PR | **reviewer** |
+| architecture, trade-off, should we use X | **architect** |
+
+When acting in a role, read `.harness/agents/<role>.md` before working.

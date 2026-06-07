@@ -1,3 +1,6 @@
+import type { WaitUntil } from '@socmint/browser-core';
+import type { ResultKind } from '../boards/board.types';
+
 export type RunStatus = 'completed' | 'failed';
 
 export interface RunRecord {
@@ -10,4 +13,82 @@ export interface RunRecord {
   error: string | null;
   page: { title: string; finalUrl: string } | null;
   artifacts: { screenshot: string | null };
+}
+
+/** A step as authored on a board (paths not yet resolved). */
+export type FlowStep =
+  | { type: 'goto'; url: string; waitUntil?: WaitUntil; timeoutMs?: number }
+  | { type: 'wait'; ms: number }
+  | {
+      type: 'agent';
+      prompt: string;
+      provider: 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'openrouter';
+      model: string;
+      apiKey: string;
+      baseUrl?: string;
+      maxSteps?: number;
+      timeoutMs?: number;
+      allowDomains?: string[];
+      readOnly?: boolean;
+    }
+  | {
+      type: 'wallet';
+      privateKey: string;
+      chains: { chainId: number; rpcUrl: string; name: string }[];
+      activeChainId: number;
+    }
+  | { type: 'fill'; selector: string; value: string }
+  | { type: 'click'; selector: string }
+  | { type: 'scroll'; direction: 'up' | 'down' }
+  | { type: 'screenshot' }
+  | {
+      type: 'if';
+      selector: string;
+      condition: 'exists' | 'not_exists';
+      thenSteps: FlowStep[];
+      elseSteps: FlowStep[];
+    }
+  | { type: 'script'; code: string }
+  | { type: 'result'; nodeId: string; kind: ResultKind };
+
+export interface FlowStepRecord {
+  type:
+    | 'goto'
+    | 'wait'
+    | 'agent'
+    | 'screenshot'
+    | 'wallet'
+    | 'fill'
+    | 'click'
+    | 'scroll'
+    | 'if'
+    | 'script'
+    | 'result';
+  status: 'completed' | 'failed';
+  error: string | null;
+  /** goto only */
+  title?: string;
+  /** goto only */
+  finalUrl?: string;
+  /** screenshot only; relative artifact path "runs/<runId>/step-<n>.png" or null */
+  screenshot?: string | null;
+  /** agent only */
+  stepsUsed?: number;
+  stopReason?: 'finished' | 'max-steps' | 'timeout' | 'error';
+  result?: unknown;
+  transcript?: string;
+  /** result only */
+  nodeId?: string;
+  /** result only */
+  kind?: ResultKind;
+}
+
+export interface FlowRunRecord {
+  id: string;
+  profileId: string;
+  status: 'completed' | 'failed';
+  startedAt: string;
+  finishedAt: string;
+  error: string | null;
+  steps: FlowStepRecord[];
 }

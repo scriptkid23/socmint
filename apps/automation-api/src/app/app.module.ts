@@ -12,10 +12,21 @@ import { RunService } from '../runs/run.service';
 import { RunsController } from '../runs/runs.controller';
 import { SessionRegistry } from '../sessions/session.registry';
 import { SessionsController } from '../sessions/sessions.controller';
+import { BoardStore } from '../boards/board.store';
+import { BoardService } from '../boards/board.service';
+import { BoardsController } from '../boards/boards.controller';
+import { RecordingRegistry } from '../recordings/recording.registry';
+import { RecordingsController } from '../recordings/recordings.controller';
 import { APP_CONFIG, AppConfig, loadConfig } from './config';
 
 @Module({
-  controllers: [ProfilesController, RunsController, SessionsController],
+  controllers: [
+    ProfilesController,
+    RunsController,
+    SessionsController,
+    BoardsController,
+    RecordingsController,
+  ],
   providers: [
     { provide: APP_CONFIG, useFactory: () => loadConfig() },
     {
@@ -63,6 +74,28 @@ import { APP_CONFIG, AppConfig, loadConfig } from './config';
         audit: AuditLogger,
         cfg: AppConfig,
       ) => new RunService(profiles, lock, browser, audit, cfg.dataRoot, cfg.artifactsRoot),
+      inject: [ProfileService, LockService, CloakBrowserService, AuditLogger, APP_CONFIG],
+    },
+    {
+      provide: BoardStore,
+      useFactory: (cfg: AppConfig) => new BoardStore(cfg.dataRoot),
+      inject: [APP_CONFIG],
+    },
+    {
+      provide: BoardService,
+      useFactory: (store: BoardStore, runs: RunService, recordings: RecordingRegistry) =>
+        new BoardService(store, runs, recordings),
+      inject: [BoardStore, RunService, RecordingRegistry],
+    },
+    {
+      provide: RecordingRegistry,
+      useFactory: (
+        profiles: ProfileService,
+        lock: LockService,
+        browser: CloakBrowserService,
+        audit: AuditLogger,
+        cfg: AppConfig,
+      ) => new RecordingRegistry(profiles, lock, browser, audit, cfg.dataRoot),
       inject: [ProfileService, LockService, CloakBrowserService, AuditLogger, APP_CONFIG],
     },
   ],

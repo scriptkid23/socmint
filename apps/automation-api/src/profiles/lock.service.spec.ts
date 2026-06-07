@@ -26,8 +26,8 @@ describe('LockService', () => {
   });
 
   it('second acquire on a live lock throws ProfileBusyError', async () => {
-    await lock.acquire(profileDir, 1234);
-    await expect(lock.acquire(profileDir, 5678)).rejects.toBeInstanceOf(ProfileBusyError);
+    await lock.acquire(profileDir, process.pid);
+    await expect(lock.acquire(profileDir, process.pid + 1)).rejects.toBeInstanceOf(ProfileBusyError);
   });
 
   it('release removes the lock and is idempotent', async () => {
@@ -35,6 +35,14 @@ describe('LockService', () => {
     await lock.release(profileDir);
     await expect(lock.release(profileDir)).resolves.toBeUndefined();
     await expect(lock.acquire(profileDir, 9999)).resolves.toBeUndefined();
+  });
+
+  it('acquire overrides a lock whose pid is no longer running', async () => {
+    await writeFile(
+      resolve(profileDir, 'profile.lock'),
+      JSON.stringify({ pid: 99999999, startedAt: new Date().toISOString() }),
+    );
+    await expect(lock.acquire(profileDir, 4321)).resolves.toBeUndefined();
   });
 
   it('acquire overrides a stale lock (older than TTL)', async () => {
@@ -51,14 +59,14 @@ describe('LockService', () => {
       JSON.stringify({ pid: 1, startedAt: '2000-01-01T00:00:00.000Z' }),
     );
     expect(await lock.isLocked(profileDir)).toBe(false);
-    await lock.acquire(profileDir, 1234);
+    await lock.acquire(profileDir, process.pid);
     expect(await lock.isLocked(profileDir)).toBe(true);
   });
 
   it('clearStaleUnder removes only stale locks across all profiles', async () => {
     const otherDir = resolve(dataRoot, 'profiles', 'id-2');
     await mkdir(otherDir, { recursive: true });
-    await lock.acquire(profileDir, 1234);
+    await lock.acquire(profileDir, process.pid);
     await writeFile(
       resolve(otherDir, 'profile.lock'),
       JSON.stringify({ pid: 1, startedAt: '2000-01-01T00:00:00.000Z' }),

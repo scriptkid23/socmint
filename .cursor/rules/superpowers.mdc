@@ -1,0 +1,13 @@
+---
+description: Superpowers skill selection workflow
+alwaysApply: true
+---
+
+# Superpowers Skill Workflow
+
+Before any task, check whether a Superpowers skill applies.
+
+- Use process skills first: `brainstorming`, `systematic-debugging`, `writing-plans`.
+- Use implementation skills second: `executing-plans`, `subagent-driven-development`.
+- Use `requesting-code-review` before merge or after major features.
+- Prefer the role-specific skill order from `.harness/agents/<role>.md` when a Harness role is active.

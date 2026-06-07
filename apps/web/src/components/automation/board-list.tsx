@@ -78,18 +78,18 @@ export function BoardList({
   const list = (
     <>
       {onRunAll && onRunSelected && (
-        <div className="flex gap-1 border-b border-border-light px-2 py-2">
+        <div className="flex flex-col gap-1 border-b border-border-light px-2 py-2">
           <Button
             onClick={onRunAll}
             disabled={runsDisabled || boards.length === 0}
-            className="flex-1 text-[10px]"
+            className="w-full text-[10px]"
           >
             Run All
           </Button>
           <Button
             onClick={onRunSelected}
             disabled={runsDisabled || selectedCount === 0}
-            className="flex-1 text-[10px]"
+            className="w-full text-[10px]"
           >
             Run Selected
           </Button>

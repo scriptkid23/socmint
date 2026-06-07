@@ -321,6 +321,32 @@ export const FlowCanvas = forwardRef<
     [injectNode, setNodes],
   );
 
+  const applyRunResult = useCallback(
+    (boardRun: BoardRunRecord) => {
+      setResult(boardRun);
+      const allRecords = boardRun.runs.flatMap((r) => r.steps);
+      const nodeStates = resultNodeStatesFromRecords(allRecords);
+      onBoardResult?.(board.id, aggregateBoardResult(allRecords));
+      setNodes((ns) => {
+        const profileNodes = ns.filter((n) => n.type === 'profile');
+        return ns.map((n) => {
+          if (n.type === 'result') {
+            return { ...n, data: { ...n.data, runtimeKind: nodeStates[n.id] } };
+          }
+          if (n.type !== 'record') return n;
+          if (((n.data as { mode?: string }).mode ?? 'record') !== 'record') return n;
+          const profileNode = profileNodes.find((p) => {
+            const pid = (p.data as { profileId?: string | null }).profileId;
+            return pid && resolveUpstreamProfile(n.id, ns, edges) === pid;
+          });
+          if (!profileNode || !chainEndsWithRecord(profileNode.id, ns, edges)) return n;
+          return { ...n, data: { ...n.data, recording: true } };
+        });
+      });
+    },
+    [board.id, edges, onBoardResult, setNodes],
+  );
+
   useImperativeHandle(
     ref,
     () => ({
@@ -358,32 +384,6 @@ export const FlowCanvas = forwardRef<
         style: { strokeWidth: 2, ...e.style },
       })),
     [edges],
-  );
-
-  const applyRunResult = useCallback(
-    (boardRun: BoardRunRecord) => {
-      setResult(boardRun);
-      const allRecords = boardRun.runs.flatMap((r) => r.steps);
-      const nodeStates = resultNodeStatesFromRecords(allRecords);
-      onBoardResult?.(board.id, aggregateBoardResult(allRecords));
-      setNodes((ns) => {
-        const profileNodes = ns.filter((n) => n.type === 'profile');
-        return ns.map((n) => {
-          if (n.type === 'result') {
-            return { ...n, data: { ...n.data, runtimeKind: nodeStates[n.id] } };
-          }
-          if (n.type !== 'record') return n;
-          if (((n.data as { mode?: string }).mode ?? 'record') !== 'record') return n;
-          const profileNode = profileNodes.find((p) => {
-            const pid = (p.data as { profileId?: string | null }).profileId;
-            return pid && resolveUpstreamProfile(n.id, ns, edges) === pid;
-          });
-          if (!profileNode || !chainEndsWithRecord(profileNode.id, ns, edges)) return n;
-          return { ...n, data: { ...n.data, recording: true } };
-        });
-      });
-    },
-    [board.id, edges, onBoardResult, setNodes],
   );
 
   const run = async () => {

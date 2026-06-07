@@ -1,4 +1,4 @@
-import { readlink, rm } from 'node:fs/promises';
+import { readFile, readlink, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { isProcessAlive } from './process-alive';
 
@@ -21,19 +21,28 @@ export class ChromiumProfileInUseError extends Error {
   }
 }
 
+async function readSingletonLockTarget(lockPath: string): Promise<string | null> {
+  try {
+    return await readlink(lockPath);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') return null;
+    // Windows (and some test seeds) may store the target as a plain file.
+    if (code === 'EINVAL' || code === 'UNKNOWN') {
+      return await readFile(lockPath, 'utf8');
+    }
+    throw err;
+  }
+}
+
 /**
  * Remove Chromium singleton lock files left behind when a process exited without
  * cleaning up. Throws when a live Chromium still holds the profile.
  */
 export async function ensureChromiumUserDataAvailable(userDataDir: string): Promise<void> {
   const lockPath = resolve(userDataDir, 'SingletonLock');
-  let lockTarget: string;
-  try {
-    lockTarget = await readlink(lockPath);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return;
-    throw err;
-  }
+  const lockTarget = await readSingletonLockTarget(lockPath);
+  if (lockTarget === null) return;
 
   const pid = parseSingletonLockPid(lockTarget);
   if (pid !== null && isProcessAlive(pid)) {

@@ -47,25 +47,20 @@ export function useBoardRunner({
       }
 
       const nameById = new Map(boards.map((b) => [b.id, b.name]));
-      setRunningIds(new Set(unique));
-
-      const settled = await Promise.allSettled(unique.map((id) => api.runBoard(id)));
-
       const newFailures: BoardRunFailure[] = [];
-      for (let i = 0; i < unique.length; i++) {
-        const boardId = unique[i];
-        const outcome = settled[i];
-        if (outcome.status === 'fulfilled') {
-          const boardRun = outcome.value;
+
+      for (const boardId of unique) {
+        setRunningIds(new Set([boardId]));
+        try {
+          const boardRun = await api.runBoard(boardId);
           const allRecords = boardRun.runs.flatMap((r) => r.steps ?? []);
           onBoardResult(boardId, aggregateBoardResult(allRecords));
           if (boardId === selectedId) {
             applyOpenBoardRun?.(boardRun);
           }
-        } else {
+        } catch (err) {
           onBoardResult(boardId, undefined);
-          const message =
-            outcome.reason instanceof Error ? outcome.reason.message : 'Run failed';
+          const message = err instanceof Error ? err.message : 'Run failed';
           newFailures.push({
             boardId,
             boardName: nameById.get(boardId) ?? boardId,

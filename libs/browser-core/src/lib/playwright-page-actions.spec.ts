@@ -66,6 +66,22 @@ describe('wrapPlaywrightPage', () => {
     }
   });
 
+  it('clickSelector resolves via evaluateHandle then uses ElementHandle.click', async () => {
+    const elementClick = jest.fn().mockResolvedValue(undefined);
+    const page = {
+      evaluateHandle: jest.fn().mockResolvedValue({ asElement: () => ({ click: elementClick }) }),
+      url: jest.fn().mockReturnValue('https://example.com'),
+      waitForNavigation: jest.fn().mockRejectedValue(new Error('timeout')),
+      waitForURL: jest.fn().mockRejectedValue(new Error('timeout')),
+      waitForLoadState: jest.fn().mockResolvedValue(undefined),
+      isClosed: () => false,
+    };
+    const actions = wrapPlaywrightPage(page);
+    await actions.clickSelector('button[id$="-trigger-nft-details"]');
+    expect(page.evaluateHandle).toHaveBeenCalled();
+    expect(elementClick).toHaveBeenCalledWith({ timeout: 5000 });
+  });
+
   it('retries readDom when evaluate fails due to navigation', async () => {
     let evaluateCalls = 0;
     const page = {

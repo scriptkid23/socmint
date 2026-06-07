@@ -9,6 +9,19 @@ import type {
   ResolvedFlowStep,
 } from './types';
 
+function stubEvaluateHandle(
+  page: object,
+  opts?: { error?: Error; evals?: string[] },
+): void {
+  Object.assign(page, {
+    evaluateHandle: async (expr: string) => {
+      opts?.evals?.push(expr);
+      if (opts?.error) throw opts.error;
+      return { asElement: () => ({ click: async () => undefined }) };
+    },
+  });
+}
+
 class FakePage implements PageLike {
   public gotoArgs: unknown[] | null = null;
   public screenshotArgs: { path: string; fullPage: boolean } | null = null;
@@ -553,7 +566,7 @@ describe('CloakBrowserService.runFlow', () => {
     expect(results[0].error).toMatch(/selector/i);
   });
 
-  it('clicks an element by selector via an in-page evaluate', async () => {
+  it('clicks an element by selector via evaluateHandle + ElementHandle.click', async () => {
     const evals: string[] = [];
     const page = {
       async goto() {},
@@ -569,6 +582,7 @@ describe('CloakBrowserService.runFlow', () => {
       async screenshot() {},
       on() {},
     } as unknown as PageLike;
+    stubEvaluateHandle(page, { evals });
     const launcher: BrowserLauncher = {
       async ensureBinary() {},
       async launchPersistentContext() {
@@ -646,12 +660,13 @@ describe('CloakBrowserService.runFlow', () => {
       url() {
         return 'https://app.example/';
       },
-      async evaluate() {
-        throw new Error('No element matches selector: #missing');
-      },
+      async evaluate() {},
       async screenshot() {},
       on() {},
     } as unknown as PageLike;
+    stubEvaluateHandle(page, {
+      error: new Error('No element matches selector: #missing'),
+    });
     const launcher: BrowserLauncher = {
       async ensureBinary() {},
       async launchPersistentContext() {
@@ -697,6 +712,7 @@ describe('CloakBrowserService.runFlow', () => {
       async screenshot() {},
       on() {},
     } as unknown as PageLike;
+    stubEvaluateHandle(page, { evals });
     const launcher: BrowserLauncher = {
       async ensureBinary() {},
       async launchPersistentContext() {

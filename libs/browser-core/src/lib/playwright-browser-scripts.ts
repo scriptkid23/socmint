@@ -116,17 +116,40 @@ const SELECTOR_RESOLVER = `
     const sel = (selector || '').trim();
     if (!sel) return null;
     if (sel.slice(0, 5).toLowerCase() === 'text=') {
-      const needle = sel.slice(5).trim().toLowerCase();
+      const needle = sel.slice(5).trim().toLowerCase().replace(/\\s+/g, ' ');
       if (!needle) return null;
-      const nodes = Array.prototype.slice.call(
-        document.querySelectorAll(
-          "button, a, [role='button'], [role='link'], [role='tab'], input[type='submit'], input[type='button'], label, summary, [onclick]",
-        ),
-      );
-      const txt = (n) => (n.innerText || n.textContent || '').trim().toLowerCase();
-      return nodes.find((n) => txt(n) === needle) || nodes.find((n) => txt(n).indexOf(needle) !== -1) || null;
+      const norm = (n) => (n.innerText || n.textContent || '').trim().toLowerCase().replace(/\\s+/g, ' ');
+      const queries = [
+        "[role='tablist'] [role='tab']",
+        "button, a, [role='button'], [role='link'], [role='tab'], input[type='submit'], input[type='button'], label, summary, [onclick]",
+      ];
+      for (const q of queries) {
+        const nodes = Array.prototype.slice.call(document.querySelectorAll(q));
+        const exact = nodes.find((n) => norm(n) === needle);
+        if (exact) return exact;
+        const partial = nodes.find((n) => norm(n).indexOf(needle) !== -1);
+        if (partial) return partial;
+      }
+      return null;
     }
     try { const el = document.querySelector(sel); if (el) return el; } catch (_) {}
+    if (sel.charAt(0) === '#') {
+      const id = sel.slice(1);
+      const triggerMatch = id.match(/-trigger-(.+)$/);
+      if (triggerMatch) {
+        const suffix = triggerMatch[1];
+        try {
+          const bySuffix = document.querySelector('[id$="-trigger-' + suffix + '"]');
+          if (bySuffix) return bySuffix;
+          const tabs = document.querySelectorAll('[role="tab"]');
+          const needle = suffix.replace(/-/g, ' ').toLowerCase();
+          for (const tab of tabs) {
+            const label = (tab.innerText || tab.textContent || '').trim().toLowerCase();
+            if (label === needle || label.indexOf(needle) !== -1) return tab;
+          }
+        } catch (_) {}
+      }
+    }
     if (sel.indexOf('>') !== -1) {
       const parts = sel.split('>').map((s) => s.trim()).filter(Boolean);
       for (let i = 1; i < parts.length; i++) {
@@ -150,11 +173,25 @@ const SELECTOR_RESOLVER = `
   }
 `;
 
+const RESOLVE_TARGET_TAIL = `
+  const el = await __cloakWaitFor(selector, 5000);
+  if (!el) throw new Error('No element matches selector: ' + selector);
+  if (el.scrollIntoView) el.scrollIntoView({ block: 'center', inline: 'center' });
+  return el;
+`;
+
+/** Resolve and return a DOM node for Playwright ElementHandle.click (Radix-safe). */
+export const RESOLVE_TARGET_FN = `(async function (selector) {
+${SELECTOR_RESOLVER}
+${RESOLVE_TARGET_TAIL}
+})`;
+
+/** Legacy in-page click — prefer RESOLVE_TARGET_FN + ElementHandle.click in Node. */
 export const CLICK_BY_SELECTOR_FN = `(async function (selector) {
 ${SELECTOR_RESOLVER}
-  const el = await __cloakWaitFor(selector, 2500);
+  const el = await __cloakWaitFor(selector, 5000);
   if (!el) throw new Error('No element matches selector: ' + selector);
-  if (el.scrollIntoView) el.scrollIntoView({ block: 'center' });
+  if (el.scrollIntoView) el.scrollIntoView({ block: 'center', inline: 'center' });
   el.click();
 })`;
 
@@ -184,7 +221,8 @@ ${SELECTOR_RESOLVER}
 })`;
 
 export const SELECTOR_EXISTS_FN = `(function (selector) {
-  return !!document.querySelector(selector);
+${SELECTOR_RESOLVER}
+  return !!__cloakResolveTarget(selector);
 })`;
 
 export const RUN_SCRIPT_FN = `(function (code) {

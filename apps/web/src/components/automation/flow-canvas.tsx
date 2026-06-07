@@ -464,6 +464,14 @@ export const FlowCanvas = forwardRef<
                   {r.error ? ` (${r.error})` : ''}
                 </span>
                 {r.steps
+                  ?.map((s, i) => ({ s, i }))
+                  .filter(({ s }) => s.status === 'failed')
+                  .map(({ s, i }) => (
+                    <p key={`fail-${i}`} className="mt-1 text-[10px] text-red-700">
+                      step {i + 1} ({s.type}) failed: {s.error ?? 'unknown error'}
+                    </p>
+                  ))}
+                {r.steps
                   ?.filter((s) => s.type === 'agent')
                   .map((s, i) => (
                     <pre

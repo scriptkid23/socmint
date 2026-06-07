@@ -3,8 +3,8 @@ import { EXTRACT_DOM_SCRIPT } from './agent/dom-serializer';
 import type { DomElement, PageActions } from './agent/types';
 import {
   CLICK_BY_INDEX_FN,
-  CLICK_BY_SELECTOR_FN,
   FILL_BY_SELECTOR_FN,
+  RESOLVE_TARGET_FN,
   RUN_SCRIPT_FN,
   SCROLL_FN,
   SELECTOR_EXISTS_FN,
@@ -25,6 +25,15 @@ function evaluateInPage(
 ): Promise<void> {
   const expr = `${fnSource.trim()}(${args.map((a) => JSON.stringify(a)).join(', ')})`;
   return page.evaluate(expr) as Promise<void>;
+}
+
+function evaluateHandleInPage(
+  page: Page,
+  fnSource: string,
+  ...args: Array<number | string>
+) {
+  const expr = `${fnSource.trim()}(${args.map((a) => JSON.stringify(a)).join(', ')})`;
+  return page.evaluateHandle(expr);
 }
 
 export function isPageActions(page: unknown): page is PageActions {
@@ -150,7 +159,14 @@ export function wrapPlaywrightPage(raw: unknown): PageActions {
     },
     async clickSelector(selector: string) {
       const urlBefore = page.url();
-      await evaluateWithRetry(page, () => evaluateInPage(page, CLICK_BY_SELECTOR_FN, selector));
+      // Radix/React tabs ignore synthetic el.click() inside page.evaluate; use
+      // Playwright's ElementHandle.click so pointer events reach the component.
+      await evaluateWithRetry(page, async () => {
+        const handle = await evaluateHandleInPage(page, RESOLVE_TARGET_FN, selector);
+        const el = handle.asElement();
+        if (!el) throw new Error('No element matches selector: ' + selector);
+        await el.click({ timeout: 5000 });
+      });
       await afterInteraction(page, urlBefore);
     },
     async pressEnter() {

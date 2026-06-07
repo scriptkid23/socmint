@@ -54,7 +54,7 @@ describe('useBoardRunner', () => {
     vi.mocked(api.runBoard).mockReset();
   });
 
-  it('runs all boards in parallel and reports pass status', async () => {
+  it('runs all boards sequentially and reports pass status', async () => {
     vi.mocked(api.runBoard).mockImplementation(async (id) => passRun(id));
     const onBoardResult = vi.fn();
 
@@ -92,7 +92,25 @@ describe('useBoardRunner', () => {
     expect(onBoardResult).not.toHaveBeenCalledWith('b1', expect.anything());
   });
 
-  it('records failures without blocking other boards', async () => {
+  it('runs boards one at a time in list order', async () => {
+    const order: string[] = [];
+    vi.mocked(api.runBoard).mockImplementation(async (id) => {
+      order.push(id);
+      return passRun(id);
+    });
+
+    const { result } = renderHook(() =>
+      useBoardRunner({ boards, selectedId: null, onBoardResult: vi.fn() }),
+    );
+
+    await act(async () => {
+      await result.current.runAll();
+    });
+
+    expect(order).toEqual(['b1', 'b2']);
+  });
+
+  it('records failures and continues with remaining boards', async () => {
     vi.mocked(api.runBoard).mockImplementation(async (id) => {
       if (id === 'b1') throw new Error('Profile already running');
       return passRun(id);

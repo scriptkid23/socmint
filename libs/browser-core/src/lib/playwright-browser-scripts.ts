@@ -173,6 +173,20 @@ const SELECTOR_RESOLVER = `
   }
 `;
 
+const RESOLVE_TARGET_TAIL = `
+  const el = await __cloakWaitFor(selector, 5000);
+  if (!el) throw new Error('No element matches selector: ' + selector);
+  if (el.scrollIntoView) el.scrollIntoView({ block: 'center', inline: 'center' });
+  return el;
+`;
+
+/** Resolve and return a DOM node for Playwright ElementHandle.click (Radix-safe). */
+export const RESOLVE_TARGET_FN = `(async function (selector) {
+${SELECTOR_RESOLVER}
+${RESOLVE_TARGET_TAIL}
+})`;
+
+/** Legacy in-page click — prefer RESOLVE_TARGET_FN + ElementHandle.click in Node. */
 export const CLICK_BY_SELECTOR_FN = `(async function (selector) {
 ${SELECTOR_RESOLVER}
   const el = await __cloakWaitFor(selector, 5000);
